@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net472</TargetFramework>
+    <AssemblyName>KCMDeckBuilder</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <!-- Optional: set to your Inscryption folder (e.g. dotnet build -p:GameDir="D:\Games\Inscryption") to copy the DLL after building -->
+    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files\Epic Games\InscryptionWkwPQ</GameDir>
+  </PropertyGroup>
+
+  <!-- Game and BepInEx references come from NuGet, so the project builds without the game installed -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3" PrivateAssets="all" />
+    <PackageReference Include="BepInEx.Core" Version="5.4.21" PrivateAssets="all" />
+    <PackageReference Include="Inscryption.GameLibs" Version="1.9.0-r.0" PrivateAssets="all" />
+    <PackageReference Include="UnityEngine.Modules" Version="2019.4.24" PrivateAssets="all" />
+  </ItemGroup>
+
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins')">
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins\KCMDeckBuilder" />
+  </Target>
+
+</Project>
