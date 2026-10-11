@@ -460,7 +460,7 @@ namespace KCMDeckBuilder
                 }
             }
             catch (Exception e) { Plugin.Log.LogWarning("Pixel font lookup failed: " + e.Message); }
-            return null;
+            return Resources.Load<Font>("fonts/pixel art fonts/marksman crisp/marksman (crisp)");
         }
 
         private void InitStyles()

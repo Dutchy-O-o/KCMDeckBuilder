@@ -11,7 +11,7 @@ using HarmonyLib;
 
 namespace KCMDeckBuilder
 {
-    [BepInPlugin(Guid, "KCM Deck Builder", "1.0.0")]
+    [BepInPlugin(Guid, "KCM Deck Builder", "1.0.1")]
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "emre.inscryption.kcmdeckbuilder";
@@ -288,6 +288,23 @@ namespace KCMDeckBuilder
             var data = SaveManager.SaveFile?.ascensionData;
             if (data != null && Plugin.CustomSelected.Value && data.currentStarterDeck == "Vanilla")
                 data.currentStarterDeck = Plugin.CustomDeckId;
+        }
+    }
+}
+
+namespace KCMDeckBuilder
+{
+    // Leshy's "reset punishment" lines ("Were you expecting more pelts?") explain the catch-up cards,
+    // which the custom deck doesn't get, so skip them.
+    [HarmonyPatch(typeof(TextDisplayer), nameof(TextDisplayer.PlayDialogueEvent))]
+    internal static class PunishmentDialoguePatch
+    {
+        private static bool Prefix(string eventId, ref System.Collections.IEnumerator __result)
+        {
+            if (eventId != "ResetRunPunishment" || !SaveFile.IsAscension
+                || AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return true;
+            __result = Enumerable.Empty<object>().GetEnumerator();
+            return false;
         }
     }
 }

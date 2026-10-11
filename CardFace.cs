@@ -37,7 +37,10 @@ namespace KCMDeckBuilder
 
         private static Font FindFont()
         {
-            Font f = Resources.FindObjectsOfTypeAll<Font>().FirstOrDefault(x => x.name == "HEAVYWEIGHT");
+            // Load it from Resources so it works even if no 3D card has been shown yet this session
+            Font f = Resources.Load<Font>("fonts/3d scene fonts/heavyweight");
+            if (f != null) return f;
+            f = Resources.FindObjectsOfTypeAll<Font>().FirstOrDefault(x => x.name == "HEAVYWEIGHT");
             if (f != null) return f;
             try
             {

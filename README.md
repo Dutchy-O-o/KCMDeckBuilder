@@ -8,6 +8,8 @@ A **BUILD CUSTOM DECK** button appears on the *Select Starter Deck* screen. It o
 
 The custom deck is a separate option. The game's own starter decks still work exactly as before.
 
+![Deck builder](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/builder-all.png)
+
 ## Features
 
 - In-game deck builder with Act 1 card faces: costs, sigils, stats, rare and gold cards.
@@ -17,9 +19,30 @@ The custom deck is a separate option. The game's own starter decks still work ex
 - **Other cards** you can't normally draft: Boulder, Stump, Dam, Frozen Opossum, The Smoke and more.
 - **Your picks only.** No catch-up cards are added with the custom deck (no extra pelts, Opossum or Ring Worm after early losses).
 - **First-node Trader.** If your custom deck has pelts, the Trader on the first node is always there.
+- **No pointless lecture.** Leshy skips the "were you expecting more pelts?" punishment lines, since the custom deck gets no catch-up cards anyway.
 - **Unlocks respected.** Only cards you have unlocked are offered (configurable).
 - **Same deck on retry.** Restarting after a loss keeps your custom deck.
 - **Modded cards.** Nature cards from other mods show up automatically.
+
+## Screenshots
+
+**The BUILD CUSTOM DECK button on the starter deck screen**
+![Starter deck screen](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/deck-select.png)
+
+**Boss cards you can't normally get**
+![Boss cards](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/builder-boss.png)
+
+**Other cards: terrain, Dam, The Smoke and more**
+![Other cards](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/builder-other.png)
+
+**Rare cards**
+![Rare cards](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/builder-rare.png)
+
+**Your run starts with exactly the cards you picked**
+![Run start](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/run-start.png)
+
+**Pelts in your deck? The Trader is waiting on the first node**
+![Trader](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/trader.png)
 
 ## Rules (config)
 
