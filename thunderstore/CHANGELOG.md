@@ -1,3 +1,11 @@
+## 1.1.0
+- RANDOM button: 3 random regular cards (at least one costs 1 blood) + 2 Rabbit Pelts.
+- Saved decks: name your deck, save it, and load or delete it later from the DECKS list.
+- The builder now uses the game's own cursor (with its trail and pointer hand), plays the menu click sound on hover and blinks highlighted buttons like the game's menus.
+- Safer save handling: the mod's hooks can no longer interrupt a save, a load or a new run if something goes wrong, and a corrupt save file no longer sends the game into a crash loop.
+- Fixed text spilling outside long lists when they scroll.
+- Fixed the boss card list in the README.
+
 ## 1.0.1
 - Fix: card names and stats could show in a tiny fallback font if the game hadn't loaded the card font yet (e.g. with the Inscryption API installed). The font is now loaded directly.
 - Leshy no longer plays the "were you expecting more pelts?" punishment lines with a custom deck, since it gets no catch-up cards.

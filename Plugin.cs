@@ -11,7 +11,7 @@ using HarmonyLib;
 
 namespace KCMDeckBuilder
 {
-    [BepInPlugin(Guid, "KCM Deck Builder", "1.0.1")]
+    [BepInPlugin(Guid, "KCM Deck Builder", "1.1.0")]
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "emre.inscryption.kcmdeckbuilder";
@@ -26,6 +26,7 @@ namespace KCMDeckBuilder
         internal static ConfigEntry<bool> AllowSpecial;
         internal static ConfigEntry<bool> CustomSelected;
         internal static string CardListPath;
+        internal static string SavedDecksPath;
 
         private void Awake()
         {
@@ -39,6 +40,7 @@ namespace KCMDeckBuilder
             AllowSpecial = Config.Bind("Rules", "AllowBossAndSpecialCards", true, "Allow boss-only cards and other cards you can't normally draft (terrain, Dam, ...).");
             CustomSelected = Config.Bind("Internal", "CustomDeckSelected", false, "Set by the mod: whether the custom deck is the selected starter deck. The save file itself never stores the custom deck, so removing the mod is safe.");
             CardListPath = Path.Combine(Paths.ConfigPath, "KCMDeckBuilder_cards.txt");
+            SavedDecksPath = Path.Combine(Paths.ConfigPath, "KCMDeckBuilder_decks.txt");
 
             gameObject.AddComponent<DeckBuilderUI>();
             new Harmony(Guid).PatchAll();
@@ -81,6 +83,39 @@ namespace KCMDeckBuilder
         }
 
         internal static bool IsPelt(CardInfo c) => CardLoader.PeltNames.Contains(c.name);
+
+        // Regular (non-rare) cards you can be offered in card choices; used by the random deck
+        internal static bool IsRegularChoice(CardInfo c) =>
+            c.metaCategories.Contains(CardMetaCategory.ChoiceNode) && !IsRare(c);
+
+        // Saved decks, one per line: "Name|Card, Card, ..."
+        internal static List<KeyValuePair<string, string>> LoadSavedDecks()
+        {
+            var list = new List<KeyValuePair<string, string>>();
+            try
+            {
+                if (!File.Exists(SavedDecksPath)) return list;
+                foreach (var line in File.ReadAllLines(SavedDecksPath, Encoding.UTF8))
+                {
+                    int bar = line.IndexOf('|');
+                    if (line.StartsWith("#") || bar <= 0) continue;
+                    list.Add(new KeyValuePair<string, string>(line.Substring(0, bar).Trim(), line.Substring(bar + 1).Trim()));
+                }
+            }
+            catch (Exception e) { Log.LogError("Could not read saved decks: " + e.Message); }
+            return list;
+        }
+
+        internal static void WriteSavedDecks(List<KeyValuePair<string, string>> decks)
+        {
+            try
+            {
+                var lines = new List<string> { "# KCM Deck Builder - saved decks (Name|Card, Card, ...)" };
+                lines.AddRange(decks.Select(d => d.Key + "|" + d.Value));
+                File.WriteAllLines(SavedDecksPath, lines.ToArray(), Encoding.UTF8);
+            }
+            catch (Exception e) { Log.LogError("Could not write saved decks: " + e.Message); }
+        }
 
         // Boss cards you can't normally get in a run
         internal static bool IsBossCard(CardInfo c) => BossCandidates.Contains(c.name) && !Draftable(c);
@@ -202,8 +237,13 @@ namespace KCMDeckBuilder
             applied = null;
             // Only act when the custom deck is selected; leave the other starter decks alone
             if (AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return;
-            Plugin.Instance.Config.Reload();
-            var deck = Plugin.BuildDeck();
+            List<CardInfo> deck = null;
+            try
+            {
+                Plugin.Instance.Config.Reload();
+                deck = Plugin.BuildDeck();
+            }
+            catch (Exception e) { Plugin.Log.LogError("Building the custom deck failed: " + e); }
             if (deck != null) starterDeck = applied = deck;
             else
             {
@@ -217,9 +257,13 @@ namespace KCMDeckBuilder
         private static void Postfix()
         {
             if (applied == null) return;
-            var run = AscensionSaveData.Data.currentRun;
-            run.playerDeck = new DeckInfo();
-            foreach (var c in applied) run.playerDeck.AddCard(CardLoader.GetCardByName(c.name));
+            try
+            {
+                var newDeck = new DeckInfo();
+                foreach (var c in applied) newDeck.AddCard(CardLoader.GetCardByName(c.name));
+                AscensionSaveData.Data.currentRun.playerDeck = newDeck;
+            }
+            catch (Exception e) { Plugin.Log.LogError("Removing catch-up cards failed, keeping the game's deck: " + e); }
             applied = null;
         }
     }
@@ -234,9 +278,13 @@ namespace KCMDeckBuilder
     {
         private static void Postfix(int rowIndex, ref bool __result)
         {
-            if (__result || !SaveFile.IsAscension || rowIndex != 1 || RunState.Run.regionTier != 0) return;
-            if (AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return;
-            if (RunState.Run.playerDeck.Cards.Exists(c => Plugin.IsPelt(c))) __result = true;
+            try
+            {
+                if (__result || !SaveFile.IsAscension || rowIndex != 1 || RunState.Run.regionTier != 0) return;
+                if (AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return;
+                if (RunState.Run.playerDeck.Cards.Exists(c => Plugin.IsPelt(c))) __result = true;
+            }
+            catch (Exception e) { Plugin.Log.LogError("Trader hook failed: " + e.Message); }
         }
     }
 }
@@ -254,28 +302,46 @@ namespace KCMDeckBuilder
 
     // Keep the custom deck id out of the save file: write "Vanilla" instead and remember the choice in the config.
     // That way the save stays valid for the unmodded game if the mod is removed.
+    internal static class SaveAccess
+    {
+        private static readonly AccessTools.FieldRef<SaveFile> saveFile = AccessTools.StaticFieldRefAccess<SaveFile>(AccessTools.Field(typeof(SaveManager), "saveFile"));
+
+        // The loaded ascension data, or null; never triggers a load
+        internal static AscensionSaveData Data
+        {
+            get
+            {
+                try { return saveFile()?.ascensionData; }
+                catch { return null; }
+            }
+        }
+    }
+
     [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.SaveToFile))]
     internal static class SavePatch
     {
-        private static void Prefix(out bool __state)
+        private static void Prefix(out AscensionSaveData __state)
         {
-            __state = false;
-            var data = SaveManager.SaveFile?.ascensionData;
-            if (data == null) return;
-            bool custom = data.currentStarterDeck == Plugin.CustomDeckId;
-            if (Plugin.CustomSelected.Value != custom) { Plugin.CustomSelected.Value = custom; Plugin.Instance.Config.Save(); }
-            if (custom) { data.currentStarterDeck = "Vanilla"; __state = true; }
+            __state = null;
+            try
+            {
+                var data = SaveAccess.Data;
+                if (data == null) return;
+                bool custom = data.currentStarterDeck == Plugin.CustomDeckId;
+                if (custom) { data.currentStarterDeck = "Vanilla"; __state = data; }
+                if (Plugin.CustomSelected.Value != custom)
+                {
+                    Plugin.CustomSelected.Value = custom;
+                    Plugin.Instance.Config.Save();
+                }
+            }
+            catch (Exception e) { Plugin.Log.LogError("Save hook failed (the game still saves normally): " + e.Message); }
         }
 
-        private static void Postfix(bool __state)
+        // Runs after saving, even if saving throws: put the custom deck back for this session
+        private static Exception Finalizer(Exception __exception, AscensionSaveData __state)
         {
-            if (__state) SaveManager.SaveFile.ascensionData.currentStarterDeck = Plugin.CustomDeckId;
-        }
-
-        // Also restore the id if saving throws, so the session keeps the custom deck
-        private static Exception Finalizer(Exception __exception, bool __state)
-        {
-            if (__exception != null && __state) SaveManager.SaveFile.ascensionData.currentStarterDeck = Plugin.CustomDeckId;
+            if (__state != null) __state.currentStarterDeck = Plugin.CustomDeckId;
             return __exception;
         }
     }
@@ -285,9 +351,13 @@ namespace KCMDeckBuilder
     {
         private static void Postfix()
         {
-            var data = SaveManager.SaveFile?.ascensionData;
-            if (data != null && Plugin.CustomSelected.Value && data.currentStarterDeck == "Vanilla")
-                data.currentStarterDeck = Plugin.CustomDeckId;
+            try
+            {
+                var data = SaveAccess.Data;
+                if (data != null && Plugin.CustomSelected.Value && data.currentStarterDeck == "Vanilla")
+                    data.currentStarterDeck = Plugin.CustomDeckId;
+            }
+            catch (Exception e) { Plugin.Log.LogError("Load hook failed: " + e.Message); }
         }
     }
 }
@@ -301,8 +371,13 @@ namespace KCMDeckBuilder
     {
         private static bool Prefix(string eventId, ref System.Collections.IEnumerator __result)
         {
-            if (eventId != "ResetRunPunishment" || !SaveFile.IsAscension
-                || AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return true;
+            if (eventId != "ResetRunPunishment") return true;
+            try
+            {
+                var data = SaveAccess.Data;
+                if (data == null || !SaveFile.IsAscension || data.currentStarterDeck != Plugin.CustomDeckId) return true;
+            }
+            catch { return true; }
             __result = Enumerable.Empty<object>().GetEnumerator();
             return false;
         }
