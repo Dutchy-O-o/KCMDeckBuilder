@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using DiskCardGame;
@@ -23,6 +24,73 @@ namespace KCMDeckBuilder
         private static readonly Dictionary<string, Texture> costCache = new Dictionary<string, Texture>();
         private static readonly Dictionary<Ability, Texture> sigilCache = new Dictionary<Ability, Texture>();
         private static GUIStyle text;
+
+        // Everything about a card that doesn't change while the builder is open. Reading these from CardInfo every
+        // frame is slow (the getters build lists and load textures, and other mods may patch them).
+        private class Info
+        {
+            internal Texture2D bg;
+            internal Color tint;
+            internal Texture2D portrait;
+            internal Rect portraitUv;
+            internal bool portraitScaled;
+            internal List<Texture> decals;
+            internal Texture cost;
+            internal List<Texture> sigils;
+            internal Texture statIcon;
+            internal string name, attack, health;
+            internal int nameSize = -1, nameFit;
+        }
+        private static readonly Dictionary<CardInfo, Info> infoCache = new Dictionary<CardInfo, Info>();
+
+        internal static void ClearCache() => infoCache.Clear();
+
+        // Logs a problem with a card once (cards from other mods can have unusual data) and carries on
+        private static readonly HashSet<string> reported = new HashSet<string>();
+        internal static void Report(CardInfo c, string what, Exception e)
+        {
+            string key = (c != null ? c.name : "?") + ":" + what;
+            if (reported.Add(key)) Plugin.Log.LogWarning($"Card '{(c != null ? c.name : "?")}': could not read {what} ({e.GetType().Name}: {e.Message})");
+        }
+
+        private static void Try(CardInfo c, string what, Action a)
+        {
+            try { a(); } catch (Exception e) { Report(c, what, e); }
+        }
+
+        internal static string Name(CardInfo c) => Get(c).name;
+
+        private static Info Get(CardInfo c)
+        {
+            if (infoCache.TryGetValue(c, out var i)) return i;
+            i = new Info { decals = new List<Texture>(), sigils = new List<Texture>(), tint = Paper, bg = bg };
+            Try(c, "background", () => i.bg = Background(c, out i.tint));
+            Try(c, "portrait", () =>
+            {
+                var sp = c.portraitTex;
+                if (sp != null && sp.texture != null)
+                {
+                    i.portrait = sp.texture;
+                    i.portraitScaled = i.portrait.width > 128 || i.portrait.height > 128;
+                    var t = sp.textureRect;
+                    i.portraitUv = new Rect(t.x / i.portrait.width, t.y / i.portrait.height, t.width / i.portrait.width, t.height / i.portrait.height);
+                }
+                else i.portrait = FallbackPortrait(c);
+            });
+            Try(c, "decals", () => i.decals = Decals(c).ToList());
+            Try(c, "cost", () => i.cost = Cost(c));
+            Try(c, "sigils", () => i.sigils = (c.Abilities ?? new List<Ability>()).Distinct().Select(Sigil).Where(t => t != null).ToList());
+            Try(c, "stat icon", () =>
+            {
+                var stat = c.SpecialStatIcon != SpecialStatIcon.None ? StatIconInfo.GetIconInfo(c.SpecialStatIcon) : null;
+                if (stat != null && stat.iconGraphic != null && StatIconInfo.IconAppliesToAttack(c.SpecialStatIcon)) i.statIcon = stat.iconGraphic;
+            });
+            i.name = Plugin.DisplayName(c).ToUpperInvariant();
+            i.attack = "?"; i.health = "?";
+            Try(c, "stats", () => { i.attack = c.Attack.ToString(); i.health = c.Health.ToString(); });
+            infoCache[c] = i;
+            return i;
+        }
 
         private static void Load()
         {
@@ -112,32 +180,21 @@ namespace KCMDeckBuilder
         internal static void DrawPortraitBox(Rect r, CardInfo c)
         {
             Load();
+            var info = Get(c);
             var uv = new Rect(5 / W, (H - 126) / H, 114 / W, 94 / H);
-            if (bg != null)
+            if (info.bg != null)
             {
                 var prev = GUI.color;
-                var back = Background(c, out var tint);
-                GUI.color = tint;
-                GUI.DrawTextureWithTexCoords(r, back, uv);
+                GUI.color = info.tint;
+                GUI.DrawTextureWithTexCoords(r, info.bg, uv);
                 GUI.color = prev;
             }
-            var sp = c.portraitTex;
-            if (sp != null && sp.texture != null)
+            if (info.portrait != null)
             {
-                var tex = sp.texture;
-                if (tex.width <= 128 && tex.height <= 128) GUI.DrawTexture(r, tex);
-                else
-                {
-                    var t = sp.textureRect;
-                    GUI.DrawTextureWithTexCoords(r, tex, new Rect(t.x / tex.width, t.y / tex.height, t.width / tex.width, t.height / tex.height));
-                }
+                if (info.portraitScaled) GUI.DrawTextureWithTexCoords(r, info.portrait, info.portraitUv);
+                else GUI.DrawTexture(r, info.portrait);
             }
-            else
-            {
-                var fallback = FallbackPortrait(c);
-                if (fallback != null) GUI.DrawTexture(r, fallback);
-            }
-            foreach (var d in Decals(c)) GUI.DrawTextureWithTexCoords(r, d, uv);
+            foreach (var d in info.decals) GUI.DrawTextureWithTexCoords(r, d, uv);
         }
 
         internal static void Draw(Rect r, CardInfo c)
@@ -146,41 +203,26 @@ namespace KCMDeckBuilder
             float k = r.width / W;
             Rect P(float x, float y, float w, float h) => new Rect(r.x + x * k, r.y + y * k, w * k, h * k);
 
+            var info = Get(c);
             var prevColor = GUI.color;
-            var bgTex = Background(c, out var bgTint);
-            GUI.color = bgTint;
-            GUI.DrawTexture(r, bgTex);
+            GUI.color = info.tint;
+            GUI.DrawTexture(r, info.bg);
             GUI.color = prevColor;
 
             // Portrait (portrait textures are 114x94 and sit right under the name bar)
-            var sp = c.portraitTex;
-            if (sp != null && sp.texture != null)
+            if (info.portrait != null)
             {
-                var tex = sp.texture;
-                if (tex.width <= 128 && tex.height <= 128)
-                    GUI.DrawTexture(P(5, 32, tex.width, tex.height), tex);
-                else
-                {
-                    var t = sp.textureRect;
-                    GUI.DrawTextureWithTexCoords(P(5, 32, 114, 94), tex,
-                        new Rect(t.x / tex.width, t.y / tex.height, t.width / tex.width, t.height / tex.height));
-                }
-            }
-            else
-            {
-                // Cards with dynamic/animated portraits (e.g. Curious Egg) usually still ship a static portrait texture
-                var fallback = FallbackPortrait(c);
-                if (fallback != null) GUI.DrawTexture(P(5, 32, fallback.width, fallback.height), fallback);
+                if (info.portraitScaled) GUI.DrawTextureWithTexCoords(P(5, 32, 114, 94), info.portrait, info.portraitUv);
+                else GUI.DrawTexture(P(5, 32, info.portrait.width, info.portrait.height), info.portrait);
             }
 
             // Decals cover the whole card (e.g. Long Elk's body is a decal)
-            foreach (var d in Decals(c)) GUI.DrawTexture(r, d);
+            foreach (var d in info.decals) GUI.DrawTexture(r, d);
 
-            var cost = Cost(c);
-            if (cost != null) GUI.DrawTexture(P(59, 14, 64, 64), cost);
+            if (info.cost != null) GUI.DrawTexture(P(59, 14, 64, 64), info.cost);
 
             // Sigils
-            var sigils = c.Abilities.Distinct().Select(Sigil).Where(t => t != null).ToList();
+            var sigils = info.sigils;
             if (sigils.Count == 1) GUI.DrawTexture(P(38, 133, 49, 49), sigils[0]);
             else if (sigils.Count >= 2)
             {
@@ -196,25 +238,26 @@ namespace KCMDeckBuilder
             text.normal.textColor = Ink;
 
             // Name, shrunk to fit the name bar
-            string name = c.DisplayedNameEnglish.ToUpperInvariant();
             int size = Mathf.Max(1, Mathf.RoundToInt(22 * k));
-            text.fontSize = size;
             text.alignment = TextAnchor.MiddleCenter;
-            float avail = 115 * k;
-            float wName = text.CalcSize(new GUIContent(name)).x;
-            if (wName > avail) text.fontSize = Mathf.Max(1, Mathf.FloorToInt(size * avail / wName));
-            GUI.Label(P(5, 4, 115, 28), name, text);
+            if (info.nameSize != size)
+            {
+                text.fontSize = size;
+                float avail = 115 * k;
+                float wName = text.CalcSize(new GUIContent(info.name)).x;
+                info.nameSize = size;
+                info.nameFit = wName > avail ? Mathf.Max(1, Mathf.FloorToInt(size * avail / wName)) : size;
+            }
+            text.fontSize = info.nameFit;
+            GUI.Label(P(5, 4, 115, 28), info.name, text);
 
             // Attack / health (special stat icons such as Ants replace the attack number)
             text.fontSize = Mathf.Max(1, Mathf.RoundToInt(40 * k));
             text.alignment = TextAnchor.MiddleLeft;
-            var statIcon = c.SpecialStatIcon != SpecialStatIcon.None ? StatIconInfo.GetIconInfo(c.SpecialStatIcon) : null;
-            if (statIcon != null && statIcon.iconGraphic != null && StatIconInfo.IconAppliesToAttack(c.SpecialStatIcon))
-                GUI.DrawTexture(P(4, 138, 40, 40), statIcon.iconGraphic);
-            else
-                GUI.Label(P(10, 136, 40, 50), c.Attack.ToString(), text);
+            if (info.statIcon != null) GUI.DrawTexture(P(4, 138, 40, 40), info.statIcon);
+            else GUI.Label(P(10, 136, 40, 50), info.attack, text);
             text.alignment = TextAnchor.MiddleCenter;
-            GUI.Label(P(92, 146, 30, 46), c.Health.ToString(), text);
+            GUI.Label(P(92, 146, 30, 46), info.health, text);
         }
     }
 }

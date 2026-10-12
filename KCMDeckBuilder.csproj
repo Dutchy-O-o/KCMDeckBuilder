@@ -7,6 +7,8 @@
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <!-- Optional: set to your Inscryption folder (e.g. dotnet build -p:GameDir="D:\Games\Inscryption") to copy the DLL after building -->
     <GameDir Condition="'$(GameDir)' == ''">C:\Program Files\Epic Games\InscryptionWkwPQ</GameDir>
+    <ApiVersion>2.24.1</ApiVersion>
+    <ApiDir>$(MSBuildProjectDirectory)\lib\API-$(ApiVersion)</ApiDir>
   </PropertyGroup>
 
   <!-- Game and BepInEx references come from NuGet, so the project builds without the game installed -->
@@ -17,7 +19,22 @@
     <PackageReference Include="UnityEngine.Modules" Version="2019.4.24" PrivateAssets="all" />
   </ItemGroup>
 
-  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins')">
+  <!-- The Inscryption API is not on NuGet, so its DLL is downloaded from Thunderstore on the first build -->
+  <ItemGroup>
+    <Reference Include="InscryptionAPI">
+      <HintPath>$(ApiDir)\plugins\InscryptionAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <EmbeddedResource Include="Resources\*.png" LogicalName="%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <Target Name="DownloadApi" BeforeTargets="ResolveAssemblyReferences" Condition="!Exists('$(ApiDir)\plugins\InscryptionAPI.dll')">
+    <DownloadFile SourceUrl="https://thunderstore.io/package/download/API_dev/API/$(ApiVersion)/" DestinationFolder="$(ApiDir)" DestinationFileName="API.zip" />
+    <Unzip SourceFiles="$(ApiDir)\API.zip" DestinationFolder="$(ApiDir)" />
+  </Target>
+
+  <!-- Only copy into a game that has the API installed, since the mod needs it -->
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins\InscryptionAPI.dll') Or Exists('$(GameDir)\BepInEx\plugins\API_dev-API\InscryptionAPI.dll')">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins\KCMDeckBuilder" />
   </Target>
 

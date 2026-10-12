@@ -9,14 +9,21 @@ using BepInEx.Configuration;
 using BepInEx.Logging;
 using DiskCardGame;
 using HarmonyLib;
+using InscryptionAPI;
+using InscryptionAPI.Ascension;
+using InscryptionAPI.Card;
+using InscryptionAPI.Saves;
+using UnityEngine;
 
 namespace KCMDeckBuilder
 {
-    [BepInPlugin(Guid, "KCM Deck Builder", "1.1.1")]
+    [BepInPlugin(Guid, "KCM Deck Builder", "2.0.0")]
+    [BepInDependency(InscryptionAPIPlugin.ModGUID)]
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "emre.inscryption.kcmdeckbuilder";
-        public const string CustomDeckId = "KCM_Custom";
+        public const string CustomDeckId = Guid + "_Custom"; // the name the API gives the deck
+        private const string SelectedKey = "CustomDeckSelected";
 
         internal static Plugin Instance;
         internal static ManualLogSource Log;
@@ -25,7 +32,8 @@ namespace KCMDeckBuilder
         internal static ConfigEntry<int> MaxCopies;
         internal static ConfigEntry<bool> OnlyUnlocked;
         internal static ConfigEntry<bool> AllowSpecial;
-        internal static ConfigEntry<bool> CustomSelected;
+        private static ConfigEntry<bool> legacySelected;
+        private static StarterDeckManager.FullStarterDeck apiDeck;
         internal static string CardListPath;
         internal static string SavedDecksPath;
 
@@ -40,13 +48,59 @@ namespace KCMDeckBuilder
             MaxCopies = Config.Bind("Rules", "MaxCopiesPerCard", 0, "Maximum copies of the same card. 0 = no limit.");
             OnlyUnlocked = Config.Bind("Rules", "OnlyUnlockedCards", true, "Only allow cards you have unlocked.");
             AllowSpecial = Config.Bind("Rules", "AllowBossAndSpecialCards", true, "Allow boss-only cards and other cards you can't normally draft (terrain, Dam, ...).");
-            CustomSelected = Config.Bind("Internal", "CustomDeckSelected", false, "Set by the mod: whether the custom deck is the selected starter deck. The save file itself never stores the custom deck, so removing the mod is safe.");
+            legacySelected = Config.Bind("Internal", "CustomDeckSelected", false, "Only read when upgrading from 1.x. The choice is now kept in the API's ModdedSaveFile.gwsave.");
             CardListPath = Path.Combine(Paths.ConfigPath, "KCMDeckBuilder_cards.txt");
             SavedDecksPath = Path.Combine(Paths.ConfigPath, "KCMDeckBuilder_decks.txt");
+
+            // A normal starter deck for the API: it gets its own icon on the deck screen next to the game's decks
+            apiDeck = StarterDeckManager.New(Guid, "Custom", "Custom Deck", LoadTexture("deck_icon.png"), ParseDeck(Deck.Value).ToArray());
 
             gameObject.AddComponent<DeckBuilderUI>();
             new Harmony(Guid).PatchAll();
             Log.LogInfo($"KCM Deck Builder loaded in {sw.Elapsed.TotalMilliseconds:0.0} ms.");
+        }
+
+        // Whether the custom deck is the selected starter deck. Kept in the API's modded save, not the game's save.
+        internal static bool CustomSelected
+        {
+            get
+            {
+                string v = ModdedSaveManager.SaveData?.GetValue(Guid, SelectedKey);
+                return v != null ? v == bool.TrueString : legacySelected.Value;
+            }
+            set => ModdedSaveManager.SaveData?.SetValue(Guid, SelectedKey, value);
+        }
+
+        // Shows the new cards on the deck screen; the run itself is always built from the config (see NewRunPatch)
+        internal static void UpdateDeckInfo(List<CardInfo> deck)
+        {
+            try
+            {
+                // The API rebuilds its deck list from CardNames each time the deck screen opens
+                apiDeck.CardNames = deck.Select(c => c.name).ToList();
+                // Until then, update the copies already in use: the one the deck icons show and the one GetInfo returns
+                var shown = StarterDeckManager.AllDecks.FirstOrDefault(d => d.Info.name == CustomDeckId)?.Info;
+                var loaded = StarterDecksUtil.GetInfo(CustomDeckId);
+                foreach (var info in new[] { shown, loaded }.Where(i => i != null).Distinct())
+                    info.cards = deck.Select(c => CardLoader.GetCardByName(c.name)).ToList();
+            }
+            catch (Exception e) { Log.LogError("Could not update the deck shown on the deck screen: " + e.Message); }
+        }
+
+        private static Texture2D LoadTexture(string name)
+        {
+            var tex = new Texture2D(2, 2, TextureFormat.RGBA32, false) { filterMode = FilterMode.Point };
+            try
+            {
+                using (var stream = typeof(Plugin).Assembly.GetManifestResourceStream(name))
+                using (var ms = new MemoryStream())
+                {
+                    stream.CopyTo(ms);
+                    tex.LoadImage(ms.ToArray());
+                }
+            }
+            catch (Exception e) { Log.LogWarning($"Could not load {name}: {e.Message}"); }
+            return tex;
         }
 
         internal static bool IsRare(CardInfo c) => c.metaCategories.Contains(CardMetaCategory.Rare);
@@ -70,6 +124,14 @@ namespace KCMDeckBuilder
         private static bool Draftable(CardInfo c) =>
             c.metaCategories.Contains(CardMetaCategory.ChoiceNode) || IsRare(c);
 
+        // Everything the builder reads from a card every frame
+        private static bool Readable(CardInfo c)
+        {
+            if (c == null || string.IsNullOrEmpty(c.name) || c.metaCategories == null || c.appearanceBehaviour == null) return false;
+            int stats = c.BloodCost + c.BonesCost + c.Attack + c.Health;
+            return c.Abilities != null;
+        }
+
         private static bool Usable(CardInfo c) =>
             !c.name.StartsWith("!") && !Excluded.Contains(c.name) && c.temple == CardTemple.Nature
             && !c.appearanceBehaviour.Contains(CardAppearanceBehaviour.Appearance.HologramPortrait) // Act 3 holograms
@@ -82,6 +144,45 @@ namespace KCMDeckBuilder
             if (c.appearanceBehaviour.Contains(CardAppearanceBehaviour.Appearance.AddSnelkDecals)) return true;
             try { if (c.Decals.Any(d => d != null)) return true; } catch { }
             return CardFace.FallbackPortrait(c) != null;
+        }
+
+        // Cards added by other mods (card packs); the API keeps the base game's cards in their own list
+        private static HashSet<string> baseGameNames;
+        internal static bool IsModded(CardInfo c)
+        {
+            if (baseGameNames == null) baseGameNames = new HashSet<string>(CardManager.BaseGameCards.Select(b => b.name));
+            return !baseGameNames.Contains(c.name);
+        }
+
+        // Share codes: "KCM:" + the card IDs in base64, so chat apps can't mangle names with underscores
+        private const string CodePrefix = "KCM:";
+
+        internal static string DeckCode(IEnumerable<CardInfo> deck) =>
+            CodePrefix + Convert.ToBase64String(Encoding.UTF8.GetBytes(string.Join(",", deck.Select(c => c.name).ToArray()))).TrimEnd('=');
+
+        // Card IDs from a share code anywhere in the text, or null if there is none
+        internal static List<string> ParseDeckCode(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return null;
+            int i = text.IndexOf(CodePrefix, StringComparison.OrdinalIgnoreCase);
+            if (i < 0) return null;
+            string b64 = new string(text.Substring(i + CodePrefix.Length).TakeWhile(ch => char.IsLetterOrDigit(ch) || ch == '+' || ch == '/' || ch == '=').ToArray()).TrimEnd('=');
+            if (b64.Length == 0) return null;
+            b64 = b64.PadRight(b64.Length + (4 - b64.Length % 4) % 4, '=');
+            try
+            {
+                var names = ParseDeck(Encoding.UTF8.GetString(Convert.FromBase64String(b64)));
+                return names.Count > 0 ? names : null;
+            }
+            catch { return null; }
+        }
+
+        // English name, falling back to the ID for cards (usually from other mods) that have none
+        internal static string DisplayName(CardInfo c)
+        {
+            string n = null;
+            try { n = c.DisplayedNameEnglish; } catch { }
+            return string.IsNullOrEmpty(n) ? c.name : n;
         }
 
         internal static bool IsPelt(CardInfo c) => CardLoader.PeltNames.Contains(c.name);
@@ -126,45 +227,55 @@ namespace KCMDeckBuilder
         internal static bool IsOtherCard(CardInfo c, HashSet<string> starterNames) =>
             !Draftable(c) && !IsPelt(c) && !IsBossCard(c) && !starterNames.Contains(c.name);
 
-        internal static HashSet<string> StarterCardNames() =>
-            new HashSet<string>(ScriptableObjectLoader<StarterDeckInfo>.AllData.SelectMany(d => d.cards).Select(c => c.name));
+        internal static HashSet<string> StarterCardNames() => DeckCardNames(d => true);
+
+        // Card IDs in the starter decks (except ours) that pass the check
+        private static HashSet<string> DeckCardNames(Func<StarterDeckInfo, bool> include)
+        {
+            var names = new HashSet<string>();
+            foreach (var d in ScriptableObjectLoader<StarterDeckInfo>.AllData)
+            {
+                try
+                {
+                    if (d == null || d.cards == null || d.name == CustomDeckId || !include(d)) continue;
+                    foreach (var c in d.cards) if (c != null) names.Add(c.name);
+                }
+                catch (Exception e) { Log.LogWarning($"Skipping starter deck '{d?.name}': {e.Message}"); }
+            }
+            return names;
+        }
 
         internal static List<CardInfo> CardPool()
         {
             // Cards from unlocked starter decks (e.g. Stoat, which is not a ChoiceNode card) are allowed too
-            var unlockedStarter = new HashSet<string>(ScriptableObjectLoader<StarterDeckInfo>.AllData
-                .Where(d => !OnlyUnlocked.Value || d.name == "Vanilla" || AscensionUnlockSchedule.StarterDeckIsUnlockedForLevel(d.name, AscensionSaveData.Data.challengeLevel))
-                .SelectMany(d => d.cards).Select(c => c.name));
+            var unlockedStarter = DeckCardNames(d =>
+                !OnlyUnlocked.Value || d.name == "Vanilla" || AscensionUnlockSchedule.StarterDeckIsUnlockedForLevel(d.name, AscensionSaveData.Data.challengeLevel));
             var allStarter = StarterCardNames();
 
+            // Each card is checked on its own: one card with broken data (usually from another mod) is left out
+            // instead of breaking the builder. Readable() also makes sure the per-frame drawing code can trust the pool.
             return ScriptableObjectLoader<CardInfo>.AllData.FindAll(c =>
-                Usable(c)
-                && (unlockedStarter.Contains(c.name)
-                    || IsPelt(c)
-                    || (Draftable(c) && (!OnlyUnlocked.Value || ConceptProgressionTree.Tree.CardUnlocked(c)))
-                    || (AllowSpecial.Value && (IsBossCard(c) || IsOtherCard(c, allStarter)))));
-        }
-
-        // The custom deck is served through StarterDecksUtil.GetInfo instead of being added to the deck list,
-        // so mods that rebuild that list (e.g. the Inscryption API) can't drop it
-        private static StarterDeckInfo customDeckInfo;
-        internal static StarterDeckInfo CustomDeckInfo
-        {
-            get
             {
-                if (customDeckInfo == null)
+                try
                 {
-                    customDeckInfo = UnityEngine.ScriptableObject.CreateInstance<StarterDeckInfo>();
-                    customDeckInfo.name = CustomDeckId;
-                    customDeckInfo.title = "Custom Deck";
-                    customDeckInfo.cards = new List<CardInfo>();
-                    UnityEngine.Object.DontDestroyOnLoad(customDeckInfo);
+                    return Readable(c) && Usable(c)
+                        && (unlockedStarter.Contains(c.name)
+                            || IsPelt(c)
+                            || (Draftable(c) && (!OnlyUnlocked.Value || ConceptProgressionTree.Tree.CardUnlocked(c)))
+                            || (AllowSpecial.Value && (IsBossCard(c) || IsOtherCard(c, allStarter))));
                 }
-                return customDeckInfo;
-            }
+                catch (Exception e)
+                {
+                    CardFace.Report(c, "card data, leaving it out", e);
+                    return false;
+                }
+            });
         }
 
-        internal static void WriteCardList()
+        private static string lastCardList;
+
+        // Writes the list of valid card IDs for editing the config by hand; skipped if nothing changed
+        internal static void WriteCardList(List<CardInfo> pool)
         {
             var sw = Stopwatch.StartNew();
             try
@@ -172,13 +283,20 @@ namespace KCMDeckBuilder
                 var sb = new StringBuilder();
                 sb.AppendLine("# KCM Deck Builder - selectable cards (ID | name | blood/bones | sigils)");
                 sb.AppendLine($"# Max cards: {LimitText(MaxCards.Value)}, max copies per card: {LimitText(MaxCopies.Value)}");
-                foreach (var c in CardPool().OrderBy(c => c.name))
+                foreach (var c in pool.OrderBy(c => c.name))
                 {
-                    string sigils = string.Join(", ", c.Abilities.Select(a => a.ToString()).ToArray());
-                    string rare = IsRare(c) ? " [RARE]" : "";
-                    sb.AppendLine($"{c.name} | {c.DisplayedNameEnglish}{rare} | {c.BloodCost}blood/{c.BonesCost}bones | {sigils}");
+                    try
+                    {
+                        string sigils = string.Join(", ", c.Abilities.Select(a => a.ToString()).ToArray());
+                        string rare = IsRare(c) ? " [RARE]" : "";
+                        sb.AppendLine($"{c.name} | {DisplayName(c)}{rare} | {c.BloodCost}blood/{c.BonesCost}bones | {sigils}");
+                    }
+                    catch { sb.AppendLine(c.name); }
                 }
-                File.WriteAllText(CardListPath, sb.ToString(), Encoding.UTF8);
+                string list = sb.ToString();
+                if (list == lastCardList && File.Exists(CardListPath)) return;
+                File.WriteAllText(CardListPath, list, Encoding.UTF8);
+                lastCardList = list;
                 Log.LogInfo($"Card list written in {sw.Elapsed.TotalMilliseconds:0.0} ms.");
             }
             catch (Exception e)
@@ -283,16 +401,7 @@ namespace KCMDeckBuilder
 
 namespace KCMDeckBuilder
 {
-    [HarmonyPatch(typeof(StarterDecksUtil), nameof(StarterDecksUtil.GetInfo))]
-    internal static class GetInfoPatch
-    {
-        private static void Postfix(string deckId, ref StarterDeckInfo __result)
-        {
-            if (__result == null && deckId == Plugin.CustomDeckId) __result = Plugin.CustomDeckInfo;
-        }
-    }
-
-    // Keep the custom deck id out of the save file: write "Vanilla" instead and remember the choice in the config.
+    // Keep the custom deck id out of the save file: write "Vanilla" instead and remember the choice in the API's modded save.
     // That way the save stays valid for the unmodded game if the mod is removed.
     internal static class SaveAccess
     {
@@ -321,11 +430,7 @@ namespace KCMDeckBuilder
                 if (data == null) return;
                 bool custom = data.currentStarterDeck == Plugin.CustomDeckId;
                 if (custom) { data.currentStarterDeck = "Vanilla"; __state = data; }
-                if (Plugin.CustomSelected.Value != custom)
-                {
-                    Plugin.CustomSelected.Value = custom;
-                    Plugin.Instance.Config.Save();
-                }
+                Plugin.CustomSelected = custom; // written to the modded save by the API right after the game saves
             }
             catch (Exception e) { Plugin.Log.LogError("Save hook failed (the game still saves normally): " + e.Message); }
         }
@@ -339,6 +444,7 @@ namespace KCMDeckBuilder
     }
 
     [HarmonyPatch(typeof(SaveManager), nameof(SaveManager.LoadFromFile))]
+    [HarmonyAfter(InscryptionAPIPlugin.ModGUID)] // the API reads its modded save in its own postfix
     internal static class LoadPatch
     {
         private static void Postfix()
@@ -346,7 +452,7 @@ namespace KCMDeckBuilder
             try
             {
                 var data = SaveAccess.Data;
-                if (data != null && Plugin.CustomSelected.Value && data.currentStarterDeck == "Vanilla")
+                if (data != null && Plugin.CustomSelected && data.currentStarterDeck == "Vanilla")
                     data.currentStarterDeck = Plugin.CustomDeckId;
             }
             catch (Exception e) { Plugin.Log.LogError("Load hook failed: " + e.Message); }
