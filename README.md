@@ -94,6 +94,25 @@ dotnet build -c Release -p:GameDir="C:\Path\To\Inscryption"
 
 `package.sh` builds the Thunderstore zip into `dist/`.
 
+The share code and config parsing have tests that run without the game (.NET 9 SDK):
+
+```sh
+dotnet test tests
+```
+
+### Code layout
+
+| File | |
+|---|---|
+| `Plugin.cs` | Entry point: config, the custom starter deck registered with the API |
+| `Patches.cs` | All Harmony patches: new run, first-node Trader, save/load, Leshy's dialogue, the menu item |
+| `CardRules.cs` | Which cards are offered and how they are grouped |
+| `DeckLogic.cs` | Deck rules: filters, search, sorting, limits, random decks |
+| `DeckCode.cs` | Card lists as text: the config format and share codes |
+| `DeckStorage.cs` | Saved decks and the card list file |
+| `DeckBuilderUI.cs` | The builder panel (IMGUI) |
+| `CardFace.cs` | Draws Act 1 card faces from the game's own textures |
+
 ## About
 
 Made with AI assistance. Designed, reviewed and tested by me in the game.
