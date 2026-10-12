@@ -50,13 +50,13 @@ namespace KCMDeckBuilder
         }
 
         // Writes the list of valid card IDs for editing the config by hand; skipped if nothing changed
-        internal static void WriteCardList(List<CardInfo> pool)
+        internal static void WriteCardList(List<CardInfo> pool, Dictionary<string, string> packNames)
         {
             var sw = Stopwatch.StartNew();
             try
             {
                 var sb = new StringBuilder();
-                sb.AppendLine("# KCM Deck Builder - selectable cards (ID | name | blood/bones | sigils)");
+                sb.AppendLine("# KCM Deck Builder - selectable cards (ID | name | blood/bones | sigils | mod)");
                 sb.AppendLine($"# Max cards: {LimitText(Plugin.MaxCards.Value)}, max copies per card: {LimitText(Plugin.MaxCopies.Value)}");
                 foreach (var c in pool.OrderBy(c => c.name))
                 {
@@ -64,7 +64,8 @@ namespace KCMDeckBuilder
                     {
                         string sigils = string.Join(", ", c.Abilities.Select(a => a.ToString()).ToArray());
                         string rare = CardRules.IsRare(c) ? " [RARE]" : "";
-                        sb.AppendLine($"{c.name} | {CardRules.DisplayName(c)}{rare} | {c.BloodCost}blood/{c.BonesCost}bones | {sigils}");
+                        string mod = packNames.TryGetValue(c.name, out var p) ? " | " + p : "";
+                        sb.AppendLine($"{c.name} | {CardRules.DisplayName(c)}{rare} | {c.BloodCost}blood/{c.BonesCost}bones | {sigils}{mod}");
                     }
                     catch { sb.AppendLine(c.name); }
                 }

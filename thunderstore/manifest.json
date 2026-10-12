@@ -1,6 +1,6 @@
 {
   "name": "KCM_Deck_Builder",
-  "version_number": "2.0.0",
+  "version_number": "2.1.0",
   "website_url": "https://github.com/Dutchy-O-o/KCMDeckBuilder",
   "description": "Build your own starter deck for Kaycee's Mod with an in-game deck builder. Adds a separate Custom Deck option; the normal starter decks are untouched.",
   "dependencies": [

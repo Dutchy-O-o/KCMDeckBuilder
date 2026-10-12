@@ -1,3 +1,9 @@
+## 2.1.0
+- PACK button: with several card mods installed, show the cards of one mod at a time, or only the base game's. Works together with the filter tabs, search and sort.
+- Hovering a modded card shows which mod it comes from, and the card ID list (KCMDeckBuilder_cards.txt) has a mod column.
+- Lighter on the game: next to no work outside the builder, long deck lists only draw the rows you can see, and texts are no longer rebuilt every frame.
+- Code cleanup: the source is split by responsibility and the share code format has tests.
+
 ## 2.0.0
 - Now built on the Inscryption API, which is a new dependency. The custom deck is a real starter deck with its own icon on the deck screen, and the "custom deck selected" choice is kept in the API's modded save. The game's own save still never stores the custom deck.
 - Card pack support: cards from other mods get their own MODDED tab with their art and sigils. Tested with JSONLoader packs and the Lobotomy Mod.

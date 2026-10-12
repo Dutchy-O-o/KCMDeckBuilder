@@ -22,6 +22,38 @@ namespace KCMDeckBuilder
         internal static string[] Filters(List<CardInfo> pool) =>
             pool.Exists(CardRules.IsModded) ? BaseFilters.Concat(new[] { "MODDED" }).ToArray() : BaseFilters;
 
+        internal const string AllPacks = "ALL", BaseGamePack = "INSCRYPTION";
+
+        // The mod each modded card comes from (card ID -> name). Usually that is the plugin that added it; a loader
+        // such as JSONLoader adds cards for many packs, so its cards are named by their pack's prefix instead.
+        internal static Dictionary<string, string> PackNames(List<CardInfo> pool)
+        {
+            var cards = pool.Where(CardRules.IsModded)
+                .Select(c => new { c.name, tag = CardRules.ModTag(c), prefix = CardRules.ModPrefix(c) })
+                .ToList();
+            var loaders = new HashSet<string>(cards.GroupBy(c => c.tag)
+                .Where(g => g.Key != null && g.Select(c => c.prefix).Distinct().Count() > 1)
+                .Select(g => g.Key));
+            var names = new Dictionary<string, string>();
+            foreach (var c in cards)
+            {
+                string pack = loaders.Contains(c.tag) || c.tag == null ? c.prefix : CardRules.PluginName(c.tag);
+                names[c.name] = (pack ?? c.prefix ?? "OTHER MODS").ToUpperInvariant();
+            }
+            return names;
+        }
+
+        // ALL, the base game, then each mod; just ALL when no card packs are installed
+        internal static string[] Packs(Dictionary<string, string> packNames) =>
+            packNames.Count == 0 ? new[] { AllPacks }
+            : new[] { AllPacks, BaseGamePack }.Concat(packNames.Values.Distinct().OrderBy(p => p)).ToArray();
+
+        internal static bool InPack(CardInfo c, string pack, Dictionary<string, string> packNames)
+        {
+            if (pack == AllPacks) return true;
+            return packNames.TryGetValue(c.name, out var p) ? p == pack : pack == BaseGamePack;
+        }
+
         internal static bool Matches(CardInfo c, string filter, string search, HashSet<string> starterNames, Dictionary<CardInfo, string> searchCache)
         {
             search = search?.Trim() ?? "";

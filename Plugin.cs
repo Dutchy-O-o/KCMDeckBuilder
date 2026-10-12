@@ -16,7 +16,7 @@ using UnityEngine;
 namespace KCMDeckBuilder
 {
     // Entry point: config, the custom starter deck registered with the API, and the "custom deck selected" flag
-    [BepInPlugin(Guid, "KCM Deck Builder", "2.0.0")]
+    [BepInPlugin(Guid, "KCM Deck Builder", "2.1.0")]
     [BepInDependency(InscryptionAPIPlugin.ModGUID)]
     public class Plugin : BaseUnityPlugin
     {

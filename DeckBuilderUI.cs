@@ -29,6 +29,9 @@ namespace KCMDeckBuilder
         private string filter = "ALL";
         private int sort;
         private string search = "";
+        private Dictionary<string, string> packNames = new Dictionary<string, string>();
+        private string[] packs = { DeckLogic.AllPacks }, packLabels = { "PACK: " + DeckLogic.AllPacks };
+        private int pack;
         private Vector2 poolScroll, deckScroll, savedScroll;
         private CardInfo hovered;
         private string message = "";
@@ -36,7 +39,7 @@ namespace KCMDeckBuilder
 
         private List<CardInfo> deck = new List<CardInfo>();
         // Derived from the deck and the rules, so OnGUI (which runs several times per frame) only reads them
-        private readonly Dictionary<string, int> copies = new Dictionary<string, int>();
+        private readonly Dictionary<string, string> copyBadges = new Dictionary<string, string>(); // card ID -> "x2"
         private string deckError, deckTotals, deckCountText;
         private bool deckFull;
 
@@ -46,10 +49,11 @@ namespace KCMDeckBuilder
         // Rebuilt only when the input changes
         private List<CardInfo> visibleCache;
         private string visibleFilter, visibleSearch;
-        private int visibleSort = -1;
+        private int visiblePack = -1, visibleSort = -1;
         private readonly Dictionary<CardInfo, string> searchCache = new Dictionary<CardInfo, string>();
         private readonly Dictionary<CardInfo, string> describeCache = new Dictionary<CardInfo, string>();
         private readonly Dictionary<string, List<CardInfo>> savedCardsCache = new Dictionary<string, List<CardInfo>>();
+        private readonly Dictionary<string, string> upperCache = new Dictionary<string, string>();
 
         private bool OnDeckScreen =>
             Menu != null && Menu.isActiveAndEnabled && Menu.CurrentScreen == AscensionMenuScreens.Screen.StarterDeckSelect;
@@ -64,16 +68,21 @@ namespace KCMDeckBuilder
         {
             try
             {
-                if (open) cursor.Update(lastHoverKey != 0);
-                if (!open && !OnDeckScreen && cursor.PointerForced) { cursor.SetPointer(false); lastHoverKey = 0; }
-                if (open && (!OnDeckScreen || Input.GetKeyDown(KeyCode.Escape))) Close(save: false);
+                // Cheapest checks first: outside the builder this is a field read per frame, with no calls into Unity
+                if (open)
+                {
+                    cursor.Update(lastHoverKey != 0);
+                    if (!OnDeckScreen || Input.GetKeyDown(KeyCode.Escape)) Close(save: false);
+                }
+                else if (cursor.PointerForced && !OnDeckScreen) { cursor.SetPointer(false); lastHoverKey = 0; }
             }
             catch (Exception e) { Fail(e); }
         }
 
         private void OnGUI()
         {
-            if (!OnDeckScreen) return;
+            // Closed, with the game-style menu item in place, there is nothing to draw
+            if ((!open && OpenButtonPatch.Added) || !OnDeckScreen) return;
             try { DrawUI(); }
             catch (Exception e) when (!(e is ExitGUIException)) { Fail(e); }
         }
@@ -102,7 +111,6 @@ namespace KCMDeckBuilder
             if (repaint) hoverKey = 0;
 
             if (open) DrawPanel();
-            else if (OpenButtonPatch.Added) return;
             else DrawFallbackButton();
 
             if (!repaint) return;
@@ -132,7 +140,7 @@ namespace KCMDeckBuilder
             SetDeck(DeckLogic.Resolve(DeckCode.ParseList(Plugin.Deck.Value), pool).Where(c => c != null).ToList());
             savedDecks = DeckStorage.LoadSavedDecks();
             // Written here rather than at the menu: by now the deck screen has loaded the starter decks, so this is cheap
-            DeckStorage.WriteCardList(pool);
+            DeckStorage.WriteCardList(pool, packNames);
             page = Page.Cards;
             open = true;
             Plugin.Log.LogDebug($"Deck builder opened in {sw.Elapsed.TotalMilliseconds:0.0} ms ({pool.Count} cards).");
@@ -166,6 +174,11 @@ namespace KCMDeckBuilder
             pool = DeckLogic.BuildPool(starterNames);
             filters = DeckLogic.Filters(pool);
             if (Array.IndexOf(filters, filter) < 0) filter = "ALL";
+            string selectedPack = packs[pack];
+            packNames = DeckLogic.PackNames(pool);
+            packs = DeckLogic.Packs(packNames);
+            packLabels = packs.Select(p => "PACK: " + p).ToArray();
+            pack = Mathf.Max(0, Array.IndexOf(packs, selectedPack));
         }
 
         private void SetDeck(List<CardInfo> cards)
@@ -177,8 +190,8 @@ namespace KCMDeckBuilder
         // Call after any change to the deck or to the card limits
         private void DeckChanged()
         {
-            copies.Clear();
-            foreach (var c in deck) copies[c.name] = copies.TryGetValue(c.name, out int n) ? n + 1 : 1;
+            copyBadges.Clear();
+            foreach (var g in deck.GroupBy(c => c.name)) copyBadges[g.Key] = "x" + g.Count();
             deckError = DeckLogic.Validate(deck)?.ToUpperInvariant();
             deckTotals = DeckLogic.Totals(deck);
             int max = Plugin.MaxCards.Value;
@@ -242,13 +255,26 @@ namespace KCMDeckBuilder
         {
             float labelW = Measure("SEARCH", 15) / u + 10;
             Label(R(pad, top, labelW, 28), "SEARCH", 15, RedDim, TextAnchor.MiddleLeft);
-            var box = R(pad + labelW + 6, top, 240, 28);
+            float sortX = pad + leftW - 200;
+            if (FrameButton(R(sortX, top, 200, 28), SortLabels[sort], false, 15)) sort = (sort + 1) % SortLabels.Length;
+
+            // With card packs installed, a PACK button between the search box and SORT; the search box gives up
+            // room for it on narrow screens
+            float boxX = pad + labelW + 6, boxW = 240;
+            if (packs.Length > 1)
+            {
+                float packW = Mathf.Min(Measure(packLabels[pack], 15) / u + 24, 300);
+                float packX = Mathf.Max(boxX + 100 + 12, sortX - 12 - packW);
+                boxW = Mathf.Min(boxW, packX - 12 - boxX);
+                if (FrameButton(R(packX, top, sortX - 12 - packX, 28), packLabels[pack], false, 15)) pack = (pack + 1) % packs.Length;
+            }
+
+            var box = R(boxX, top, boxW, 28);
             GUI.Box(box, GUIContent.none, frame);
             var prev = BeginText(new Rect(box.x + 6 * u, box.y, box.width - 12 * u, box.height), 15, RedBright, TextAnchor.MiddleLeft, out var field);
             search = GUI.TextField(field, search, text);
             GUI.matrix = prev;
             if (search.Length == 0) Label(new Rect(box.x + 8 * u, box.y, box.width - 16 * u, box.height), "NAME OR SIGIL", 15, RedDim, TextAnchor.MiddleLeft);
-            if (FrameButton(R(pad + leftW - 200, top, 200, 28), SortLabels[sort], false, 15)) sort = (sort + 1) % SortLabels.Length;
         }
 
         // The hovered card's description, or a hint for the page
@@ -259,7 +285,16 @@ namespace KCMDeckBuilder
             text.wordWrap = true;
             if (hovered != null)
             {
-                if (!describeCache.TryGetValue(hovered, out var desc)) describeCache[hovered] = desc = DeckLogic.Describe(hovered);
+                if (!describeCache.TryGetValue(hovered, out var desc))
+                {
+                    desc = DeckLogic.Describe(hovered);
+                    if (packNames.TryGetValue(hovered.name, out var from))
+                    {
+                        int end = desc.IndexOf('\n');
+                        desc = desc.Insert(end < 0 ? desc.Length : end, $"  ({from})");
+                    }
+                    describeCache[hovered] = desc;
+                }
                 Label(info, desc, 14, Red, TextAnchor.UpperLeft);
             }
             else if (page == Page.Decks) Label(info, "SAVE YOUR DECK UNDER A NAME, OR SHARE IT: COPY CODE PUTS IT IN YOUR CLIPBOARD, PASTE CODE LOADS ONE.", 14, RedDim, TextAnchor.UpperLeft);
@@ -270,11 +305,12 @@ namespace KCMDeckBuilder
 
         private void DrawGrid(Rect view)
         {
-            if (visibleCache == null || visibleFilter != filter || visibleSearch != search || visibleSort != sort)
+            if (visibleCache == null || visibleFilter != filter || visibleSearch != search || visiblePack != pack || visibleSort != sort)
             {
-                visibleCache = DeckLogic.Sort(pool.Where(c => DeckLogic.Matches(c, filter, search, starterNames, searchCache)), DeckLogic.Sorts[sort]).ToList();
+                visibleCache = DeckLogic.Sort(pool.Where(c => DeckLogic.InPack(c, packs[pack], packNames) && DeckLogic.Matches(c, filter, search, starterNames, searchCache)), DeckLogic.Sorts[sort]).ToList();
                 visibleFilter = filter;
                 visibleSearch = search;
+                visiblePack = pack;
                 visibleSort = sort;
             }
             var visible = visibleCache;
@@ -319,13 +355,13 @@ namespace KCMDeckBuilder
                 Label(new Rect(r.x, r.y + r.height * 0.55f, r.width, 30 * u), CardFace.Name(c), 13, Red, TextAnchor.MiddleCenter);
             }
 
-            if (copies.TryGetValue(c.name, out int inDeck))
+            if (copyBadges.TryGetValue(c.name, out var badgeText))
             {
                 // In the portrait's top-left corner, clear of the name
                 float k = r.width / CardFace.W;
                 var badge = new Rect(r.x + 5 * k, r.y + 32 * k, 32 * u, 24 * u);
                 GUI.DrawTexture(badge, texRed);
-                Label(badge, "x" + inDeck, 15, Bg, TextAnchor.MiddleCenter);
+                Label(badge, badgeText, 15, Bg, TextAnchor.MiddleCenter);
             }
         }
 
@@ -354,7 +390,8 @@ namespace KCMDeckBuilder
             var content = new Rect(0, 0, list.width - 20 * u, deck.Count * rowH * u);
             clipView = list;
             deckScroll = GUI.BeginScrollView(list, deckScroll, content, false, false);
-            for (int i = 0; i < deck.Count; i++)
+            int last = Mathf.Min(deck.Count - 1, Mathf.CeilToInt((deckScroll.y + list.height) / (rowH * u)));
+            for (int i = Mathf.Max(0, Mathf.FloorToInt(deckScroll.y / (rowH * u))); i <= last; i++)
             {
                 var c = deck[i];
                 var row = new Rect(0, i * rowH * u, content.width, (rowH - 6) * u);
@@ -431,13 +468,14 @@ namespace KCMDeckBuilder
             var content = new Rect(0, 0, list.width - 20 * u, savedDecks.Count * rowH);
             clipView = list;
             savedScroll = GUI.BeginScrollView(list, savedScroll, content, false, true);
-            for (int i = 0; i < savedDecks.Count; i++)
+            int last = Mathf.Min(savedDecks.Count - 1, Mathf.CeilToInt((savedScroll.y + list.height) / rowH));
+            for (int i = Mathf.Max(0, Mathf.FloorToInt(savedScroll.y / rowH)); i <= last; i++)
             {
                 var d = savedDecks[i];
                 var row = new Rect(0, i * rowH, content.width, rowH - 8 * u);
                 bool over = Over(row);
                 if (over) GUI.Box(row, GUIContent.none, frameHover);
-                Label(new Rect(row.x + 8 * u, row.y, 220 * u, row.height), d.Key.ToUpperInvariant(), 16, over ? RedBright : Red, TextAnchor.MiddleLeft);
+                Label(new Rect(row.x + 8 * u, row.y, 220 * u, row.height), Upper(d.Key), 16, over ? RedBright : Red, TextAnchor.MiddleLeft);
 
                 if (!savedCardsCache.TryGetValue(d.Value, out var cards))
                     savedCardsCache[d.Value] = cards = DeckLogic.Resolve(DeckCode.ParseList(d.Value), pool);
@@ -462,6 +500,12 @@ namespace KCMDeckBuilder
             }
             GUI.EndScrollView();
             clipView = null;
+        }
+
+        private string Upper(string s)
+        {
+            if (!upperCache.TryGetValue(s, out var up)) upperCache[s] = up = s.ToUpperInvariant();
+            return up;
         }
 
         private void SaveCurrentAs()

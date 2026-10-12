@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using BepInEx.Bootstrap;
 using DiskCardGame;
 using InscryptionAPI.Card;
 
@@ -49,6 +50,19 @@ namespace KCMDeckBuilder
             if (baseGameNames == null) baseGameNames = new HashSet<string>(CardManager.BaseGameCards.Select(b => b.name));
             return !baseGameNames.Contains(c.name);
         }
+
+        // The GUID of the plugin that added the card, and the prefix its pack gives card IDs; null if unknown
+        internal static string ModTag(CardInfo c) => Safe(c.GetModTag);
+        internal static string ModPrefix(CardInfo c) => Safe(c.GetModPrefix);
+
+        private static string Safe(Func<string> get)
+        {
+            try { string s = get(); return string.IsNullOrEmpty(s) ? null : s; }
+            catch { return null; }
+        }
+
+        internal static string PluginName(string guid) =>
+            Chainloader.PluginInfos.TryGetValue(guid, out var p) && !string.IsNullOrEmpty(p.Metadata.Name) ? p.Metadata.Name : null;
 
         // English name, falling back to the ID for cards (usually from other mods) that have none
         internal static string DisplayName(CardInfo c)
