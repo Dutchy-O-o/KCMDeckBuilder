@@ -12,9 +12,10 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 
 - In-game deck builder with Act 1 card faces: costs, sigils, stats, rare and gold cards.
 - Filters: **ALL, PELTS, BOSS, OTHER, BLOOD, BONES, FREE, RARE**, and **MODDED** when card packs are installed.
+- **Sigils at a glance.** Hover a card to see its sigils with their icons and rulebook text in a box beside it.
 - **Search by name or sigil.** Type "airborne" to find every card with Airborne.
 - **Sort** by cost, attack, health or name. Your deck shows its total blood, bones, attack and health.
-- **Card packs.** Cards from other mods (JSONLoader packs, Lobotomy Mod and others) show up with their art and sigils in their own MODDED tab. With several mods installed, the **PACK** button shows the cards of one mod at a time (or only the base game's), and hovering a card tells you which mod it comes from.
+- **Card packs.** Cards from other mods (JSONLoader packs, Lobotomy Mod and others) show up with their art and sigils in their own MODDED tab. With several mods installed, the **PACK** button shows the cards of one mod at a time (or only the base game's).
 - **Share codes.** COPY CODE puts your deck in the clipboard as a short code (`KCM:...`) to post anywhere; PASTE CODE loads one.
 - **Saved decks.** Name and save your decks, then load them again from the DECKS list.
 - **Random deck.** Press RANDOM for 3 random regular cards (one of them always costs 1 blood) plus 2 Rabbit Pelts. Press again to reroll.

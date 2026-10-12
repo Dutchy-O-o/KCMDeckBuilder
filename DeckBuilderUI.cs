@@ -34,6 +34,7 @@ namespace KCMDeckBuilder
         private int pack;
         private Vector2 poolScroll, deckScroll, savedScroll;
         private CardInfo hovered;
+        private Rect hoveredRect; // where the hovered card is drawn, outside any scroll view
         private string message = "";
         private float messageUntil;
 
@@ -45,13 +46,15 @@ namespace KCMDeckBuilder
 
         private string deckName = "";
         private List<KeyValuePair<string, string>> savedDecks = new List<KeyValuePair<string, string>>();
+        private string deleting; // the saved deck waiting for its DELETE? click
+        private float deletingUntil;
 
         // Rebuilt only when the input changes
         private List<CardInfo> visibleCache;
         private string visibleFilter, visibleSearch;
         private int visiblePack = -1, visibleSort = -1;
         private readonly Dictionary<CardInfo, string> searchCache = new Dictionary<CardInfo, string>();
-        private readonly Dictionary<CardInfo, string> describeCache = new Dictionary<CardInfo, string>();
+        private readonly Dictionary<CardInfo, CardTip> tipCache = new Dictionary<CardInfo, CardTip>();
         private readonly Dictionary<string, List<CardInfo>> savedCardsCache = new Dictionary<string, List<CardInfo>>();
         private readonly Dictionary<string, string> upperCache = new Dictionary<string, string>();
 
@@ -168,7 +171,7 @@ namespace KCMDeckBuilder
             starterNames = CardRules.StarterCardNames();
             CardFace.ClearCache(); // other mods can change card data between visits
             visibleCache = null;
-            describeCache.Clear();
+            tipCache.Clear();
             savedCardsCache.Clear();
             searchCache.Clear();
             pool = DeckLogic.BuildPool(starterNames);
@@ -246,6 +249,7 @@ namespace KCMDeckBuilder
 
             DrawFooter(leftW, pad);
             DrawDeckPanel(lw, rightW, pad, y);
+            DrawCardTip();
 
             // CRT scanlines over everything
             GUI.DrawTextureWithTexCoords(new Rect(0, 0, vw, vh), texScan, new Rect(0, 0, 1, vh / 3f));
@@ -277,31 +281,83 @@ namespace KCMDeckBuilder
             if (search.Length == 0) Label(new Rect(box.x + 8 * u, box.y, box.width - 16 * u, box.height), "NAME OR SIGIL", 15, RedDim, TextAnchor.MiddleLeft);
         }
 
-        // The hovered card's description, or a hint for the page
+        // A hint for the page
         private void DrawFooter(float leftW, float pad)
         {
             Dash(new Rect(0, vh - 84 * u, vw, 2 * u));
             var info = new Rect(pad * u, vh - 76 * u, (leftW + pad) * u, 70 * u);
             text.wordWrap = true;
-            if (hovered != null)
-            {
-                if (!describeCache.TryGetValue(hovered, out var desc))
-                {
-                    desc = DeckLogic.Describe(hovered);
-                    if (packNames.TryGetValue(hovered.name, out var from))
-                    {
-                        int end = desc.IndexOf('\n');
-                        desc = desc.Insert(end < 0 ? desc.Length : end, $"  ({from})");
-                    }
-                    describeCache[hovered] = desc;
-                }
-                Label(info, desc, 14, Red, TextAnchor.UpperLeft);
-            }
-            else if (page == Page.Decks) Label(info, "SAVE YOUR DECK UNDER A NAME, OR SHARE IT: COPY CODE PUTS IT IN YOUR CLIPBOARD, PASTE CODE LOADS ONE.", 14, RedDim, TextAnchor.UpperLeft);
+            if (page == Page.Decks) Label(info, "SAVE YOUR DECK UNDER A NAME, OR SHARE IT: COPY CODE PUTS IT IN YOUR CLIPBOARD, PASTE CODE LOADS ONE.", 14, RedDim, TextAnchor.UpperLeft);
             else if (page == Page.Settings) Label(info, "CHANGES ARE SAVED RIGHT AWAY.", 14, RedDim, TextAnchor.UpperLeft);
-            else Label(info, "CLICK A CARD TO ADD IT.  ESC OR X TO GO BACK.", 14, RedDim, TextAnchor.UpperLeft);
+            else Label(info, "CLICK A CARD TO ADD IT. HOVER IT TO READ ITS SIGILS.  ESC OR X TO GO BACK.", 14, RedDim, TextAnchor.UpperLeft);
             text.wordWrap = false;
         }
+
+        private class CardTip
+        {
+            internal string header, pack;
+            internal List<KeyValuePair<Texture, string>> sigils;
+        }
+
+        private CardTip GetTip(CardInfo c)
+        {
+            if (tipCache.TryGetValue(c, out var tip)) return tip;
+            tip = new CardTip
+            {
+                header = DeckLogic.Header(c),
+                pack = packNames.TryGetValue(c.name, out var p) ? "FROM " + p : null,
+                sigils = DeckLogic.Sigils(c).Select(s => new KeyValuePair<Texture, string>(CardFace.Sigil(s.Key), s.Value)).ToList(),
+            };
+            return tipCache[c] = tip;
+        }
+
+        // The hovered card's name, stats, mod and sigils in a box beside it (on the other side if there is no room)
+        private void DrawCardTip()
+        {
+            if (hovered == null) return;
+            var tip = GetTip(hovered);
+            const float w = 340f, inset = 10f, icon = 26f, gap = 8f, lineH = 18f;
+            float textW = w - inset * 2 - icon - gap;
+
+            float h = inset * 2 + lineH + (tip.pack != null ? lineH : 0);
+            foreach (var s in tip.sigils) h += 8 + Mathf.Max(icon, TextLines(s.Value, 14, textW) * lineH);
+
+            var box = new Rect(hoveredRect.xMax + 10 * u, 0, w * u, h * u);
+            if (box.xMax > vw - 4 * u) box.x = hoveredRect.x - 10 * u - box.width;
+            box.y = Mathf.Clamp(hoveredRect.y, 4 * u, vh - box.height - 4 * u);
+            GUI.DrawTexture(box, texBg);
+            GUI.Box(box, GUIContent.none, frame);
+
+            float x = box.x + inset * u, y = box.y + inset * u;
+            Label(new Rect(x, y, (w - inset * 2) * u, lineH * u), tip.header, 16, RedBright, TextAnchor.MiddleLeft);
+            y += lineH * u;
+            if (tip.pack != null)
+            {
+                Label(new Rect(x, y, (w - inset * 2) * u, lineH * u), tip.pack, 14, Red, TextAnchor.MiddleLeft);
+                y += lineH * u;
+            }
+
+            text.wordWrap = true;
+            foreach (var s in tip.sigils)
+            {
+                y += 8 * u;
+                // Sigil icons are black line art, so each sits on a scrap of card paper
+                var iconRect = new Rect(x, y, icon * u, icon * u);
+                var prev = GUI.color;
+                GUI.color = CardFace.Paper;
+                GUI.DrawTexture(iconRect, Texture2D.whiteTexture);
+                GUI.color = prev;
+                if (s.Key != null) GUI.DrawTexture(iconRect, s.Key);
+                float rowH = Mathf.Max(icon, TextLines(s.Value, 14, textW) * lineH);
+                Label(new Rect(x + (icon + gap) * u, y, textW * u, rowH * u), s.Value, 14, Red, TextAnchor.UpperLeft);
+                y += rowH * u;
+            }
+            text.wordWrap = false;
+        }
+
+        // Roughly how many lines the text wraps to in a width (in 720p units)
+        private int TextLines(string s, int size, float width) =>
+            Mathf.Max(1, Mathf.CeilToInt(Measure(s, size) / (width * u * 0.92f)));
 
         private void DrawGrid(Rect view)
         {
@@ -339,7 +395,7 @@ namespace KCMDeckBuilder
         private void DrawTile(Rect r, CardInfo c)
         {
             bool over = Hover(r, Key(Kind.Card, c.name, false, r));
-            if (over) hovered = c;
+            if (over) SetHovered(c, r);
             if (GUI.Button(r, GUIContent.none, GUIStyle.none)) TryAdd(c);
 
             if (CardFace.Available)
@@ -363,6 +419,13 @@ namespace KCMDeckBuilder
                 GUI.DrawTexture(badge, texRed);
                 Label(badge, badgeText, 15, Bg, TextAnchor.MiddleCenter);
             }
+        }
+
+        private void SetHovered(CardInfo c, Rect r)
+        {
+            hovered = c;
+            var p = GUIUtility.GUIToScreenPoint(r.position) / guiScale;
+            hoveredRect = new Rect(p.x, p.y, r.width, r.height);
         }
 
         private void TryAdd(CardInfo c)
@@ -421,7 +484,7 @@ namespace KCMDeckBuilder
             float bw2 = (rightW - 28 - 8) / 2f;
             if (FrameButton(R(rx + 14, bottom + 74, bw2, 32), "CANCEL", false, 15)) Close(save: false);
             if (FrameButton(R(rx + 22 + bw2, bottom + 74, bw2, 32), "SAVE", false, 15)) Close(save: true);
-            if (FrameButton(R(rx + 14, bottom + 116, rightW - 28, 44), "START WITH THIS DECK", true, 17))
+            if (FrameButton(R(rx + 14, bottom + 116, rightW - 28, 44), "START WITH THIS DECK", true, 17, arrow: true))
             {
                 if (deckError != null) Flash("Invalid deck: " + deckError);
                 else StartWithDeck();
@@ -484,18 +547,29 @@ namespace KCMDeckBuilder
                 {
                     var thumb = new Rect(tx, row.y + 4 * u, 59 * u, 48 * u);
                     if (thumb.xMax > row.xMax - 170 * u) break;
-                    if (c != null) { DrawPortraitBox(thumb, c); if (Over(thumb)) hovered = c; }
+                    if (c != null) { DrawPortraitBox(thumb, c); if (Over(thumb)) SetHovered(c, thumb); }
                     GUI.Box(thumb, GUIContent.none, frame);
                     tx += 65 * u;
                 }
 
+                // Deleting takes two clicks: X turns LOAD and X into a DELETE? button for a few seconds
+                if (d.Key == deleting && Time.unscaledTime < deletingUntil)
+                {
+                    if (FrameButton(new Rect(row.xMax - 160 * u, row.y + 12 * u, 148 * u, 32 * u), "DELETE?", true, 15))
+                    {
+                        savedDecks.RemoveAt(i);
+                        DeckStorage.WriteSavedDecks(savedDecks);
+                        Flash($"Deleted '{d.Key}'.");
+                        deleting = null;
+                        break;
+                    }
+                    continue;
+                }
                 if (FrameButton(new Rect(row.xMax - 160 * u, row.y + 12 * u, 100 * u, 32 * u), "LOAD", false, 15)) { LoadSaved(d, cards); break; }
                 if (IconButton(new Rect(row.xMax - 44 * u, row.y + 14 * u, 28 * u, 28 * u), texBack))
                 {
-                    savedDecks.RemoveAt(i);
-                    DeckStorage.WriteSavedDecks(savedDecks);
-                    Flash($"Deleted '{d.Key}'.");
-                    break;
+                    deleting = d.Key;
+                    deletingUntil = Time.unscaledTime + 3f;
                 }
             }
             GUI.EndScrollView();

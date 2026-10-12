@@ -165,24 +165,30 @@ namespace KCMDeckBuilder
             catch { return a.ToString(); }
         }
 
-        // Name, cost and stats, then one line per sigil with its rulebook text
-        internal static string Describe(CardInfo c)
+        // Name, cost and stats
+        internal static string Header(CardInfo c)
         {
+            string name = CardRules.DisplayName(c).ToUpperInvariant();
+            try { return $"{name} - {Cost(c)}, {c.Attack}/{c.Health}".ToUpperInvariant(); }
+            catch { return name; }
+        }
+
+        // Each sigil once, with its rulebook name and text
+        internal static List<KeyValuePair<Ability, string>> Sigils(CardInfo c)
+        {
+            var list = new List<KeyValuePair<Ability, string>>();
             string name = CardRules.DisplayName(c);
-            string s;
-            try { s = $"{name.ToUpperInvariant()} - {Cost(c)}, {c.Attack}/{c.Health}"; }
-            catch { s = name.ToUpperInvariant(); }
             try
             {
-                foreach (var a in c.Abilities)
+                foreach (var a in c.Abilities.Distinct())
                 {
                     string d;
                     try { d = AbilitiesUtil.GetInfo(a)?.LocalizedRulebookDescription ?? ""; } catch { d = ""; }
-                    s += $"\n{AbilityName(a).ToUpperInvariant()}: {d.Replace("[creature]", name)}";
+                    list.Add(new KeyValuePair<Ability, string>(a, $"{AbilityName(a).ToUpperInvariant()}: {d.Replace("[creature]", name)}"));
                 }
             }
             catch (Exception e) { CardFace.Report(c, "sigils", e); }
-            return s;
+            return list;
         }
 
         internal static string Totals(List<CardInfo> deck)

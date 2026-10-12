@@ -14,7 +14,7 @@ namespace KCMDeckBuilder
         internal const float W = 125f, H = 190f;
 
         private static readonly Color Ink = new Color(0.1f, 0.09f, 0.12f);
-        private static readonly Color Paper = new Color(1f, 0.86f, 0.72f); // warm tint, like the candle-lit table
+        internal static readonly Color Paper = new Color(1f, 0.86f, 0.72f); // warm tint, like the candle-lit table
 
         private static Texture2D bg, bgRare, bgTerrain;
         private static readonly Color Gold = new Color(1f, 0.78f, 0.22f);
@@ -164,7 +164,7 @@ namespace KCMDeckBuilder
             return list;
         }
 
-        private static Texture Sigil(Ability a)
+        internal static Texture Sigil(Ability a)
         {
             if (!sigilCache.TryGetValue(a, out var t))
             {

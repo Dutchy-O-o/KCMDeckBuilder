@@ -131,7 +131,7 @@ namespace KCMDeckBuilder
         private void Dash(Rect r) =>
             GUI.DrawTextureWithTexCoords(r, texDash, new Rect(0, 0, r.width / (8f * u), 1));
 
-        private bool FrameButton(Rect r, string label, bool primary, int size)
+        private bool FrameButton(Rect r, string label, bool primary, int size, bool arrow = false)
         {
             int id = Key(Kind.Button, label, true, r);
             bool over = Hover(r, id);
@@ -139,7 +139,7 @@ namespace KCMDeckBuilder
             var style = primary ? (lit ? frameFilledHover : frameFilled) : (lit ? frameFilledHover : over ? frameHover : frame);
             bool clicked = GUI.Button(r, GUIContent.none, style);
             Label(r, label, size, primary || lit ? Bg : (over ? RedBright : Red), TextAnchor.MiddleCenter);
-            if (primary && texContinue != null)
+            if (arrow && texContinue != null)
             {
                 var prev = GUI.color;
                 GUI.color = Bg;
