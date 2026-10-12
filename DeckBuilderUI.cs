@@ -13,8 +13,7 @@ namespace KCMDeckBuilder
     {
         internal static AscensionMenuScreens Menu;
 
-        private static readonly string[] BaseFilters = { "ALL", "PELTS", "BOSS", "OTHER", "BLOOD", "BONES", "FREE", "RARE" };
-        private static readonly string[] Sorts = { "DEFAULT", "COST", "ATTACK", "HEALTH", "NAME" };
+        private static readonly string[] Sorts = DeckLogic.Sorts;
 
         // Kaycee's Mod menu palette
         private static readonly Color Red = new Color(0.80f, 0.16f, 0.19f);
@@ -47,7 +46,7 @@ namespace KCMDeckBuilder
         private List<CardInfo> pool = new List<CardInfo>();
         private List<CardInfo> deck = new List<CardInfo>();
         private HashSet<string> starterNames = new HashSet<string>();
-        private string[] filters = BaseFilters; // plus MODDED when card packs are installed
+        private string[] filters = DeckLogic.BaseFilters; // plus MODDED when card packs are installed
         private string filter = "ALL";
         private int sort;
         private string search = "";
@@ -79,7 +78,11 @@ namespace KCMDeckBuilder
             Menu != null && Menu.isActiveAndEnabled &&
             Menu.CurrentScreen == AscensionMenuScreens.Screen.StarterDeckSelect;
 
-        private void Awake() => useGUILayout = false;
+        private void Awake()
+        {
+            Instance = this;
+            useGUILayout = false; // no GUILayout is used, so skip the extra layout pass before every OnGUI event
+        }
 
         private void Update()
         {
@@ -137,6 +140,8 @@ namespace KCMDeckBuilder
             bool repaint = Event.current.type == EventType.Repaint;
             if (repaint) hoverKey = null;
 
+            // The starter deck screen normally has the game-style button (OpenButtonPatch); this one is the fallback
+            if (!open && OpenButtonPatch.Added) return;
             if (!open)
             {
                 bool selected = AscensionSaveData.Data.currentStarterDeck == Plugin.CustomDeckId;
@@ -270,7 +275,9 @@ namespace KCMDeckBuilder
         private Rect R(float x, float y, float w, float h) => new Rect(x * u, y * u, w * u, h * u);
         private int F(int size) => Mathf.Max(8, Mathf.RoundToInt(size * u));
 
-        private void Open()
+        internal static DeckBuilderUI Instance;
+
+        internal void Open()
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Plugin.Instance.Config.Reload();
@@ -297,11 +304,8 @@ namespace KCMDeckBuilder
             describeCache.Clear();
             savedCardsCache.Clear();
             searchCache.Clear();
-            pool = Plugin.CardPool()
-                .OrderBy(c => Plugin.IsPelt(c) ? 0 : Plugin.IsModded(c) ? 4 : Plugin.IsBossCard(c) || Plugin.IsOtherCard(c, starterNames) ? 5
-                    : c.BloodCost > 0 ? 1 : c.BonesCost > 0 ? 2 : 3)
-                .ThenBy(c => c.BloodCost + c.BonesCost).ThenBy(Plugin.DisplayName).ToList();
-            filters = pool.Exists(Plugin.IsModded) ? BaseFilters.Concat(new[] { "MODDED" }).ToArray() : BaseFilters;
+            pool = DeckLogic.BuildPool(starterNames);
+            filters = DeckLogic.Filters(pool);
             if (Array.IndexOf(filters, filter) < 0) filter = "ALL";
         }
 
@@ -309,9 +313,7 @@ namespace KCMDeckBuilder
         {
             if (save)
             {
-                Plugin.Deck.Value = string.Join(", ", deck.Select(c => c.name).ToArray());
-                Plugin.Instance.Config.Save();
-                Plugin.UpdateDeckInfo(deck);
+                DeckLogic.SaveDeck(deck);
                 Plugin.Log.LogInfo($"Deck saved: {Plugin.Deck.Value}");
             }
             open = false;
@@ -322,10 +324,8 @@ namespace KCMDeckBuilder
         // Same flow as clicking one of the game's deck icons: select the deck, go to the challenge screen
         private void StartWithDeck()
         {
-            Close(save: true);
-            AscensionSaveData.Data.currentStarterDeck = Plugin.CustomDeckId;
-            Plugin.Log.LogInfo("Custom deck selected.");
-            Menu.SwitchToScreen(AscensionMenuScreens.Screen.SelectChallenges);
+            Close(save: false);
+            DeckLogic.StartWithDeck(deck);
         }
 
         private void SetInteraction(bool disabled)
@@ -406,7 +406,7 @@ namespace KCMDeckBuilder
             text.wordWrap = true;
             if (hovered != null)
             {
-                if (!describeCache.TryGetValue(hovered, out var desc)) describeCache[hovered] = desc = Describe(hovered);
+                if (!describeCache.TryGetValue(hovered, out var desc)) describeCache[hovered] = desc = DeckLogic.Describe(hovered);
                 Label(info, desc, 14, Red, TextAnchor.UpperLeft);
             }
             else if (page == Page.Decks) Label(info, "SAVE YOUR DECK UNDER A NAME, OR SHARE IT: COPY CODE PUTS IT IN YOUR CLIPBOARD, PASTE CODE LOADS ONE.", 14, RedDim, TextAnchor.UpperLeft);
@@ -424,15 +424,7 @@ namespace KCMDeckBuilder
         {
             if (visibleCache == null || visibleFilter != filter || visibleSearch != search || visibleSort != sort)
             {
-                var cards = pool.Where(Matches);
-                switch (Sorts[sort])
-                {
-                    case "COST": cards = cards.OrderBy(c => c.BloodCost).ThenBy(c => c.BonesCost); break;
-                    case "ATTACK": cards = cards.OrderByDescending(c => c.Attack).ThenByDescending(c => c.Health); break;
-                    case "HEALTH": cards = cards.OrderByDescending(c => c.Health).ThenByDescending(c => c.Attack); break;
-                    case "NAME": cards = cards.OrderBy(Plugin.DisplayName); break;
-                }
-                visibleCache = cards.ToList();
+                visibleCache = DeckLogic.Sort(pool.Where(c => DeckLogic.Matches(c, filter, search, starterNames, searchCache)), Sorts[sort]).ToList();
                 visibleFilter = filter;
                 visibleSearch = search;
                 visibleSort = sort;
@@ -442,6 +434,8 @@ namespace KCMDeckBuilder
             float tw = CardFace.W * cardScale, th = CardFace.H * cardScale, gap = 14f * u;
             int cols = Mathf.Max(1, (int)((view.width - 24 * u) / (tw + gap)));
             int rows = (visible.Count + cols - 1) / cols;
+            // Center the columns in the space left of the scrollbar
+            float left = 6 * u + Mathf.Max(0f, (view.width - 20 * u - 12 * u) - (cols * (tw + gap) - gap)) / 2f;
             var content = new Rect(0, 0, view.width - 20 * u, rows * (th + gap) + 10 * u);
 
             clipView = view;
@@ -451,7 +445,7 @@ namespace KCMDeckBuilder
             int lastRow = Mathf.CeilToInt((poolScroll.y + view.height) / (th + gap)) + 1;
             for (int i = firstRow * cols; i < visible.Count && i / cols <= lastRow; i++)
             {
-                var r = new Rect(6 * u + (i % cols) * (tw + gap), 8 * u + (i / cols) * (th + gap), tw, th);
+                var r = new Rect(left + (i % cols) * (tw + gap), 8 * u + (i / cols) * (th + gap), tw, th);
                 DrawTile(r, visible[i]);
             }
             GUI.EndScrollView();
@@ -497,7 +491,7 @@ namespace KCMDeckBuilder
             {
                 int blood = 0, bones = 0, atk = 0, hp = 0;
                 foreach (var c in deck) { blood += c.BloodCost; bones += c.BonesCost; atk += c.Attack; hp += c.Health; }
-                Label(R(rx + 14, bottom - 30, rightW - 28, 26), $"TOTAL: {blood} BLOOD  {bones} BONES  {atk} ATK  {hp} HP", 15, RedDim, TextAnchor.MiddleLeft);
+                Label(R(rx + 14, bottom - 30, rightW - 28, 26), $"{blood} BLOOD  {bones} BONES  {atk} ATK  {hp} HP", 15, RedDim, TextAnchor.MiddleLeft);
             }
             string err = Plugin.Validate(deck);
             var msgRect = R(rx + 14, bottom, rightW - 28, 30);
@@ -523,22 +517,8 @@ namespace KCMDeckBuilder
         // 3 random regular cards (at least one costs exactly 1 blood) + 2 Rabbit Pelts
         private void Randomize()
         {
-            var regular = pool.Where(Plugin.IsRegularChoice).ToList();
-            var oneBlood = regular.Where(c => c.BloodCost == 1).ToList();
-            if (oneBlood.Count == 0 || regular.Select(c => c.name).Distinct().Count() < 3)
-            {
-                Flash("Not enough unlocked cards to randomize.");
-                return;
-            }
-            var picks = new List<CardInfo> { oneBlood[rng.Next(oneBlood.Count)] };
-            while (picks.Count < 3)
-            {
-                var c = regular[rng.Next(regular.Count)];
-                if (!picks.Exists(p => p.name == c.name)) picks.Add(c);
-            }
-            picks = picks.OrderBy(_ => rng.Next()).ToList();
-            var hare = pool.Find(c => c.name == "PeltHare");
-            if (hare != null) { picks.Add(hare); picks.Add(hare); }
+            var picks = DeckLogic.RandomDeck(pool, rng);
+            if (picks == null) { Flash("Not enough unlocked cards to randomize."); return; }
             deck = picks;
             page = Page.Cards;
         }
@@ -675,9 +655,9 @@ namespace KCMDeckBuilder
             SettingLabel(x, y, label, hint);
             float bx = x + 360 * u;
             result = value;
-            if (FrameButton(new Rect(bx, y, 34 * u, 34 * u), "-", false, 18)) result = Mathf.Max(0, value - 1);
+            if (FrameButton(new Rect(bx, y, 34 * u, 34 * u), "-", false, 24)) result = Mathf.Max(0, value - 1);
             Label(new Rect(bx + 40 * u, y, 130 * u, 34 * u), value > 0 ? value.ToString() : "NO LIMIT", 16, RedBright, TextAnchor.MiddleCenter);
-            if (FrameButton(new Rect(bx + 176 * u, y, 34 * u, 34 * u), "+", false, 18)) result = Mathf.Min(99, value + 1);
+            if (FrameButton(new Rect(bx + 176 * u, y, 34 * u, 34 * u), "+", false, 24)) result = Mathf.Min(99, value + 1);
             y += 76 * u;
             return result != value;
         }
@@ -693,7 +673,7 @@ namespace KCMDeckBuilder
         private void SettingLabel(float x, float y, string label, string hint)
         {
             Label(new Rect(x, y, 350 * u, 34 * u), label, 17, Red, TextAnchor.MiddleLeft);
-            Label(new Rect(x, y + 36 * u, 700 * u, 24 * u), hint, 13, RedDim, TextAnchor.MiddleLeft);
+            Label(new Rect(x, y + 36 * u, 800 * u, 26 * u), hint, 15, RedDim, TextAnchor.MiddleLeft);
         }
 
         private void DrawTile(Rect r, CardInfo c)
@@ -718,7 +698,9 @@ namespace KCMDeckBuilder
             }
             if (inDeck > 0)
             {
-                var b = new Rect(r.xMax - 26 * u, r.y - 8 * u, 32 * u, 24 * u);
+                // Top-left corner of the portrait, so it doesn't cover the name
+                float k = r.width / CardFace.W;
+                var b = new Rect(r.x + 5 * k, r.y + 32 * k, 32 * u, 24 * u);
                 GUI.DrawTexture(b, texRed);
                 Label(b, "x" + inDeck, 15, Bg, TextAnchor.MiddleCenter);
             }
@@ -726,73 +708,10 @@ namespace KCMDeckBuilder
 
         private void TryAdd(CardInfo c)
         {
-            var test = new List<CardInfo>(deck) { c };
-            if (Plugin.MaxCards.Value > 0 && test.Count > Plugin.MaxCards.Value) { Flash($"At most {Plugin.MaxCards.Value} cards."); return; }
-            if (Plugin.MaxCopies.Value > 0 && test.Count(d => d.name == c.name) > Plugin.MaxCopies.Value) { Flash($"At most {Plugin.MaxCopies.Value} copies of a card."); return; }
+            string err = DeckLogic.CannotAdd(deck, c);
+            if (err != null) { Flash(err); return; }
             deck.Add(c);
             CommandLineTextDisplayer.PlayCommandLineClickSound();
-        }
-
-        private bool Matches(CardInfo c)
-        {
-            if (search.Length > 0 && SearchText(c).IndexOf(search.Trim(), StringComparison.OrdinalIgnoreCase) < 0)
-                return false;
-            switch (filter)
-            {
-                case "PELTS": return Plugin.IsPelt(c);
-                case "BOSS": return Plugin.IsBossCard(c);
-                case "OTHER": return Plugin.IsOtherCard(c, starterNames) && !Plugin.IsModded(c);
-                case "BLOOD": return c.BloodCost > 0;
-                case "BONES": return c.BonesCost > 0;
-                case "FREE": return c.BloodCost == 0 && c.BonesCost == 0;
-                case "RARE": return Plugin.IsRare(c);
-                case "MODDED": return Plugin.IsModded(c);
-                default: return true;
-            }
-        }
-
-        // What the search box looks at: ID, name and sigil names
-        private string SearchText(CardInfo c)
-        {
-            if (!searchCache.TryGetValue(c, out var s))
-            {
-                s = c.name + "\n" + Plugin.DisplayName(c);
-                try { foreach (var a in c.Abilities.Distinct()) s += "\n" + AbilityName(a); } catch { }
-                searchCache[c] = s;
-            }
-            return s;
-        }
-
-        private static string Cost(CardInfo c)
-        {
-            if (c.BloodCost > 0) return $"{c.BloodCost} blood";
-            if (c.BonesCost > 0) return $"{c.BonesCost} bones";
-            return "free";
-        }
-
-        private static string AbilityName(Ability a)
-        {
-            try { return AbilitiesUtil.GetInfo(a)?.rulebookName ?? a.ToString(); }
-            catch { return a.ToString(); }
-        }
-
-        private static string Describe(CardInfo c)
-        {
-            string name = Plugin.DisplayName(c);
-            string s;
-            try { s = $"{name.ToUpperInvariant()} - {Cost(c)}, {c.Attack}/{c.Health}"; }
-            catch { s = name.ToUpperInvariant(); }
-            try
-            {
-                foreach (var a in c.Abilities)
-                {
-                    string d;
-                    try { d = AbilitiesUtil.GetInfo(a)?.LocalizedRulebookDescription ?? ""; } catch { d = ""; }
-                    s += $"\n{AbilityName(a).ToUpperInvariant()}: {d.Replace("[creature]", name)}";
-                }
-            }
-            catch (Exception e) { CardFace.Report(c, "sigils", e); }
-            return s;
         }
 
         // ---- drawing helpers ----
@@ -999,6 +918,40 @@ namespace KCMDeckBuilder
             skin.settings.selectionColor = new Color(Red.r, Red.g, Red.b, 0.4f);
 
             text = new GUIStyle { font = pixelFont, richText = false, wordWrap = false, clipping = TextClipping.Clip };
+        }
+    }
+
+    // A "- BUILD CUSTOM DECK -" menu item on the starter deck screen, cloned from one of the game's own menu
+    // items so it has the same font, blinking highlight, pointer cursor and sound
+    [HarmonyPatch(typeof(AscensionChooseStarterDeckScreen), "Start")]
+    internal static class OpenButtonPatch
+    {
+        internal static bool Added;
+
+        private static void Postfix(AscensionChooseStarterDeckScreen __instance)
+        {
+            try
+            {
+                var unlocks = Traverse.Create(AscensionMenuScreens.Instance).Field("unlockSummaryScreen").GetValue<GameObject>();
+                var proto = unlocks.transform.Find("Stats/ScreenAnchor").GetChild(0).gameObject;
+                var go = UnityEngine.Object.Instantiate(proto, __instance.transform);
+                go.name = "KCM_BuildDeckButton";
+                // Halfway between the header line and the top row of deck icons
+                go.transform.localPosition = new Vector3(0f, 0.82f, 0f);
+                var text = go.GetComponentInChildren<PixelText>(true);
+                text.SetText("- BUILD CUSTOM DECK -");
+                // Fit the click area and the highlight bar to the text instead of the whole screen width
+                var uiText = text.GetComponentInChildren<UnityEngine.UI.Text>(true);
+                float w = (uiText != null ? uiText.preferredWidth * text.transform.localScale.x : 1.3f) + 0.04f;
+                var col = go.GetComponent<BoxCollider2D>();
+                if (col != null) { col.size = new Vector2(w, 0.1f); col.offset = Vector2.zero; }
+                var back = text.transform.Find("Text/Back");
+                if (back != null) back.localScale = new Vector3(w / text.transform.localScale.x, back.localScale.y, 1f);
+                go.GetComponent<AscensionMenuInteractable>().CursorSelectStarted = _ => { if (DeckBuilderUI.Instance != null) DeckBuilderUI.Instance.Open(); };
+                go.SetActive(true);
+                Added = true;
+            }
+            catch (Exception e) { Plugin.Log.LogError("Could not add the BUILD CUSTOM DECK button, using the fallback one: " + e); }
         }
     }
 
