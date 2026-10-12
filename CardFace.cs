@@ -120,7 +120,6 @@ namespace KCMDeckBuilder
 
         private static bool Has(CardInfo c, CardAppearanceBehaviour.Appearance a) => c.appearanceBehaviour.Contains(a);
 
-        // Background texture and tint, following the card's appearance behaviours
         private static Texture2D Background(CardInfo c, out Color tint)
         {
             tint = Has(c, CardAppearanceBehaviour.Appearance.GoldEmission) ? Gold : Paper;
@@ -220,7 +219,6 @@ namespace KCMDeckBuilder
 
             if (info.cost != null) GUI.DrawTexture(P(59, 14, 64, 64), info.cost);
 
-            // Sigils
             var sigils = info.sigils;
             if (sigils.Count == 1) GUI.DrawTexture(P(38, 133, 49, 49), sigils[0]);
             else if (sigils.Count >= 2)

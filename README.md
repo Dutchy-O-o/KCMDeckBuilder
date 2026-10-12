@@ -110,7 +110,9 @@ dotnet test tests
 | `DeckLogic.cs` | Deck rules: filters, search, sorting, limits, random decks |
 | `DeckCode.cs` | Card lists as text: the config format and share codes |
 | `DeckStorage.cs` | Saved decks and the card list file |
-| `DeckBuilderUI.cs` | The builder panel (IMGUI) |
+| `DeckBuilderUI.cs` | The builder panel (IMGUI): state and pages |
+| `DeckBuilderUI.Widgets.cs` | Its Kaycee's Mod style text, buttons and frames |
+| `GameCursor.cs` | The game's cursor and trail, drawn on top of the panel |
 | `CardFace.cs` | Draws Act 1 card faces from the game's own textures |
 
 ## About

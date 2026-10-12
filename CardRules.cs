@@ -36,7 +36,6 @@ namespace KCMDeckBuilder
         internal static bool IsRegularChoice(CardInfo c) =>
             c.metaCategories.Contains(CardMetaCategory.ChoiceNode) && !IsRare(c);
 
-        // Boss cards you can't normally get in a run
         internal static bool IsBossCard(CardInfo c) => BossCandidates.Contains(c.name) && !Draftable(c);
 
         // Everything else in the Nature set you can't normally draft (terrain, Dam, Smoke, ...)

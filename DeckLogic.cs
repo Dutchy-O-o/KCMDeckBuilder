@@ -153,7 +153,6 @@ namespace KCMDeckBuilder
             return s;
         }
 
-        // "3 BLOOD  2 BONES  5 ATK  7 HP" for the deck panel
         internal static string Totals(List<CardInfo> deck)
         {
             int blood = 0, bones = 0, atk = 0, hp = 0;
