@@ -6,7 +6,6 @@
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
     <!-- Optional: set to your Inscryption folder (e.g. dotnet build -p:GameDir="D:\Games\Inscryption") to copy the DLL after building -->
-    <GameDir Condition="'$(GameDir)' == ''">C:\Program Files\Epic Games\InscryptionWkwPQ</GameDir>
     <ApiVersion>2.24.1</ApiVersion>
     <ApiDir>$(MSBuildProjectDirectory)\lib\API-$(ApiVersion)</ApiDir>
   </PropertyGroup>
@@ -39,7 +38,7 @@
   </Target>
 
   <!-- Only copy into a game that has the API installed, since the mod needs it -->
-  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="Exists('$(GameDir)\BepInEx\plugins\InscryptionAPI.dll') Or Exists('$(GameDir)\BepInEx\plugins\API_dev-API\InscryptionAPI.dll')">
+  <Target Name="CopyToPlugins" AfterTargets="Build" Condition="'$(GameDir)' != '' And (Exists('$(GameDir)\BepInEx\plugins\InscryptionAPI.dll') Or Exists('$(GameDir)\BepInEx\plugins\API_dev-API\InscryptionAPI.dll'))">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(GameDir)\BepInEx\plugins\KCMDeckBuilder" />
   </Target>
 
