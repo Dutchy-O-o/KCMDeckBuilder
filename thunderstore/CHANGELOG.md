@@ -1,3 +1,9 @@
+## 1.1.1
+- Fixed: catch-up cards could still end up in a custom deck run. The game's catch-up rule is now switched off while a custom run is created, so you start with exactly your picks, and cards other mods add at the start of a run are kept.
+- Opening the Kaycee's Mod menu no longer freezes for about a second. The mod used to load the game's starter decks early there; the card ID list is now written when you open the builder instead.
+- The log now shows how long the mod takes to load and to open the builder.
+- Noted in the README that the mod was made with AI assistance.
+
 ## 1.1.0
 - RANDOM button: 3 random regular cards (at least one costs 1 blood) + 2 Rabbit Pelts.
 - Saved decks: name your deck, save it, and load or delete it later from the DECKS list.

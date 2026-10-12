@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -11,7 +12,7 @@ using HarmonyLib;
 
 namespace KCMDeckBuilder
 {
-    [BepInPlugin(Guid, "KCM Deck Builder", "1.1.0")]
+    [BepInPlugin(Guid, "KCM Deck Builder", "1.1.1")]
     public class Plugin : BaseUnityPlugin
     {
         public const string Guid = "emre.inscryption.kcmdeckbuilder";
@@ -30,6 +31,7 @@ namespace KCMDeckBuilder
 
         private void Awake()
         {
+            var sw = Stopwatch.StartNew();
             Instance = this;
             Log = Logger;
             Deck = Config.Bind("Deck", "Cards", "Stoat, Bullfrog, Wolf",
@@ -44,7 +46,7 @@ namespace KCMDeckBuilder
 
             gameObject.AddComponent<DeckBuilderUI>();
             new Harmony(Guid).PatchAll();
-            Log.LogInfo("KCM Deck Builder loaded.");
+            Log.LogInfo($"KCM Deck Builder loaded in {sw.Elapsed.TotalMilliseconds:0.0} ms.");
         }
 
         internal static bool IsRare(CardInfo c) => c.metaCategories.Contains(CardMetaCategory.Rare);
@@ -164,6 +166,7 @@ namespace KCMDeckBuilder
 
         internal static void WriteCardList()
         {
+            var sw = Stopwatch.StartNew();
             try
             {
                 var sb = new StringBuilder();
@@ -176,6 +179,7 @@ namespace KCMDeckBuilder
                     sb.AppendLine($"{c.name} | {c.DisplayedNameEnglish}{rare} | {c.BloodCost}blood/{c.BonesCost}bones | {sigils}");
                 }
                 File.WriteAllText(CardListPath, sb.ToString(), Encoding.UTF8);
+                Log.LogInfo($"Card list written in {sw.Elapsed.TotalMilliseconds:0.0} ms.");
             }
             catch (Exception e)
             {
@@ -218,23 +222,15 @@ namespace KCMDeckBuilder
         }
     }
 
-    [HarmonyPatch(typeof(AscensionMenuScreens), "Start")]
-    internal static class MenuStartPatch
-    {
-        private static void Postfix()
-        {
-            Plugin.WriteCardList();
-        }
-    }
-
     [HarmonyPatch(typeof(AscensionSaveData), nameof(AscensionSaveData.NewRun))]
     internal static class NewRunPatch
     {
-        private static List<CardInfo> applied;
-
-        private static void Prefix(ref List<CardInfo> starterDeck)
+        // NewRun adds catch-up cards based on numRunsSinceReachedFirstBoss: 0 -> 2 pelts, 1 -> Opossum + pelt,
+        // more -> Opossum + Ring Worm. A negative value matches none of those, so while the run is created we set it
+        // to -1 and restore it right after. The deck itself is never touched, so cards other mods add are kept.
+        private static void Prefix(ref List<CardInfo> starterDeck, out int? __state)
         {
-            applied = null;
+            __state = null;
             // Only act when the custom deck is selected; leave the other starter decks alone
             if (AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return;
             List<CardInfo> deck = null;
@@ -244,27 +240,23 @@ namespace KCMDeckBuilder
                 deck = Plugin.BuildDeck();
             }
             catch (Exception e) { Plugin.Log.LogError("Building the custom deck failed: " + e); }
-            if (deck != null) starterDeck = applied = deck;
-            else
+            if (deck == null)
             {
                 Plugin.Log.LogWarning("Custom deck invalid, using the Vanilla deck.");
                 starterDeck = StarterDecksUtil.GetInfo("Vanilla").cards;
+                return;
             }
+            starterDeck = deck;
+            var data = AscensionSaveData.Data;
+            __state = data.numRunsSinceReachedFirstBoss;
+            data.numRunsSinceReachedFirstBoss = -1;
         }
 
-        // NewRun adds catch-up cards (2 pelts, or Opossum/Ring Worm after early losses).
-        // With a custom deck the player picks everything, so rebuild the deck from the chosen cards only.
-        private static void Postfix()
+        // Runs even if NewRun throws, so the counter is always restored
+        private static Exception Finalizer(Exception __exception, int? __state)
         {
-            if (applied == null) return;
-            try
-            {
-                var newDeck = new DeckInfo();
-                foreach (var c in applied) newDeck.AddCard(CardLoader.GetCardByName(c.name));
-                AscensionSaveData.Data.currentRun.playerDeck = newDeck;
-            }
-            catch (Exception e) { Plugin.Log.LogError("Removing catch-up cards failed, keeping the game's deck: " + e); }
-            applied = null;
+            if (__state.HasValue) AscensionSaveData.Data.numRunsSinceReachedFirstBoss = __state.Value;
+            return __exception;
         }
     }
 }

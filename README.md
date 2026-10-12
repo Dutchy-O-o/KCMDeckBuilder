@@ -67,7 +67,7 @@ The custom deck is a separate option. The game's own starter decks still work ex
 | `OnlyUnlockedCards` | true | Only offer cards you have unlocked |
 | `AllowBossAndSpecialCards` | true | Show the BOSS and OTHER cards |
 
-The deck is saved in the same file (`Cards = ...`). A list of valid card IDs is written to `BepInEx/config/KCMDeckBuilder_cards.txt`. Saved decks live in `BepInEx/config/KCMDeckBuilder_decks.txt`.
+The deck is saved in the same file (`Cards = ...`). A list of valid card IDs is written to `BepInEx/config/KCMDeckBuilder_cards.txt` when you open the builder. Saved decks live in `BepInEx/config/KCMDeckBuilder_decks.txt`.
 
 ## Compatibility
 
@@ -94,6 +94,10 @@ dotnet build -c Release -p:GameDir="C:\Path\To\Inscryption"
 ```
 
 `package.sh` builds the Thunderstore zip into `dist/`.
+
+## About
+
+Made with AI assistance. Designed, reviewed and tested by me in the game.
 
 ## License
 

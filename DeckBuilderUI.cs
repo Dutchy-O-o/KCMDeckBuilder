@@ -226,6 +226,7 @@ namespace KCMDeckBuilder
 
         private void Open()
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             Plugin.Instance.Config.Reload();
             starterNames = Plugin.StarterCardNames();
             pool = Plugin.CardPool()
@@ -236,8 +237,11 @@ namespace KCMDeckBuilder
                 .Select(n => pool.Find(c => string.Equals(c.name, n, StringComparison.OrdinalIgnoreCase)))
                 .Where(c => c != null).ToList();
             savedDecks = Plugin.LoadSavedDecks();
+            // Written here rather than at the menu: by now the deck screen has loaded the starter decks, so this is cheap
+            Plugin.WriteCardList();
             showDecks = false;
             open = true;
+            Plugin.Log.LogInfo($"Deck builder opened in {sw.Elapsed.TotalMilliseconds:0.0} ms ({pool.Count} cards).");
             CommandLineTextDisplayer.PlayCommandLineClickSound();
             SetInteraction(disabled: true);
         }
