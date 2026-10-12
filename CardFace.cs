@@ -12,7 +12,6 @@ namespace KCMDeckBuilder
     internal static class CardFace
     {
         internal const float W = 125f, H = 190f;
-        internal const float Aspect = W / H;
 
         private static readonly Color Ink = new Color(0.1f, 0.09f, 0.12f);
         private static readonly Color Paper = new Color(1f, 0.86f, 0.72f); // warm tint, like the candle-lit table
@@ -85,7 +84,7 @@ namespace KCMDeckBuilder
                 var stat = c.SpecialStatIcon != SpecialStatIcon.None ? StatIconInfo.GetIconInfo(c.SpecialStatIcon) : null;
                 if (stat != null && stat.iconGraphic != null && StatIconInfo.IconAppliesToAttack(c.SpecialStatIcon)) i.statIcon = stat.iconGraphic;
             });
-            i.name = Plugin.DisplayName(c).ToUpperInvariant();
+            i.name = CardRules.DisplayName(c).ToUpperInvariant();
             i.attack = "?"; i.health = "?";
             Try(c, "stats", () => { i.attack = c.Attack.ToString(); i.health = c.Health.ToString(); });
             infoCache[c] = i;
@@ -100,7 +99,7 @@ namespace KCMDeckBuilder
             bgRare = Resources.Load<Texture2D>("art/cards/card_empty_rare");
             bgTerrain = Resources.Load<Texture2D>("art/cards/card_terrain_empty");
             font = FindFont();
-            Plugin.Log.LogInfo($"Card face: background={(bg != null)}, font={(font != null ? font.name : "fallback")}");
+            Plugin.Log.LogDebug($"Card face: background={(bg != null)}, font={(font != null ? font.name : "fallback")}");
         }
 
         private static Font FindFont()
@@ -116,7 +115,7 @@ namespace KCMDeckBuilder
                 if (tmp != null && tmp.sourceFontFile != null) return tmp.sourceFontFile;
             }
             catch { }
-            return Resources.FindObjectsOfTypeAll<Font>().FirstOrDefault(x => x.name == "HEAVYWEIGHT");
+            return null;
         }
 
         private static bool Has(CardInfo c, CardAppearanceBehaviour.Appearance a) => c.appearanceBehaviour.Contains(a);
@@ -126,7 +125,7 @@ namespace KCMDeckBuilder
         {
             tint = Has(c, CardAppearanceBehaviour.Appearance.GoldEmission) ? Gold : Paper;
             if (Has(c, CardAppearanceBehaviour.Appearance.TerrainBackground) && bgTerrain != null) return bgTerrain;
-            if ((Has(c, CardAppearanceBehaviour.Appearance.RareCardBackground) || Plugin.IsRare(c)) && bgRare != null) return bgRare;
+            if ((Has(c, CardAppearanceBehaviour.Appearance.RareCardBackground) || CardRules.IsRare(c)) && bgRare != null) return bgRare;
             return bg;
         }
 

@@ -5,7 +5,7 @@ using DiskCardGame;
 
 namespace KCMDeckBuilder
 {
-    // Deck building rules shared by the native screen and the classic panel: filters, search, sorting, random decks
+    // Deck building rules, separate from the drawing code: filters, search, sorting, limits, random decks
     internal static class DeckLogic
     {
         internal static readonly string[] BaseFilters = { "ALL", "PELTS", "BOSS", "OTHER", "BLOOD", "BONES", "FREE", "RARE" };
@@ -13,14 +13,14 @@ namespace KCMDeckBuilder
 
         // The selectable cards in display order (pelts, blood, bones, free, modded, boss/other)
         internal static List<CardInfo> BuildPool(HashSet<string> starterNames) =>
-            Plugin.CardPool()
-                .OrderBy(c => Plugin.IsPelt(c) ? 0 : Plugin.IsModded(c) ? 4 : Plugin.IsBossCard(c) || Plugin.IsOtherCard(c, starterNames) ? 5
+            CardRules.CardPool()
+                .OrderBy(c => CardRules.IsPelt(c) ? 0 : CardRules.IsModded(c) ? 4 : CardRules.IsBossCard(c) || CardRules.IsOtherCard(c, starterNames) ? 5
                     : c.BloodCost > 0 ? 1 : c.BonesCost > 0 ? 2 : 3)
-                .ThenBy(c => c.BloodCost + c.BonesCost).ThenBy(Plugin.DisplayName).ToList();
+                .ThenBy(c => c.BloodCost + c.BonesCost).ThenBy(CardRules.DisplayName).ToList();
 
         // Filter tabs, with MODDED only when card packs are installed
         internal static string[] Filters(List<CardInfo> pool) =>
-            pool.Exists(Plugin.IsModded) ? BaseFilters.Concat(new[] { "MODDED" }).ToArray() : BaseFilters;
+            pool.Exists(CardRules.IsModded) ? BaseFilters.Concat(new[] { "MODDED" }).ToArray() : BaseFilters;
 
         internal static bool Matches(CardInfo c, string filter, string search, HashSet<string> starterNames, Dictionary<CardInfo, string> searchCache)
         {
@@ -29,14 +29,14 @@ namespace KCMDeckBuilder
                 return false;
             switch (filter)
             {
-                case "PELTS": return Plugin.IsPelt(c);
-                case "BOSS": return Plugin.IsBossCard(c);
-                case "OTHER": return Plugin.IsOtherCard(c, starterNames) && !Plugin.IsModded(c);
+                case "PELTS": return CardRules.IsPelt(c);
+                case "BOSS": return CardRules.IsBossCard(c);
+                case "OTHER": return CardRules.IsOtherCard(c, starterNames) && !CardRules.IsModded(c);
                 case "BLOOD": return c.BloodCost > 0;
                 case "BONES": return c.BonesCost > 0;
                 case "FREE": return c.BloodCost == 0 && c.BonesCost == 0;
-                case "RARE": return Plugin.IsRare(c);
-                case "MODDED": return Plugin.IsModded(c);
+                case "RARE": return CardRules.IsRare(c);
+                case "MODDED": return CardRules.IsModded(c);
                 default: return true;
             }
         }
@@ -46,7 +46,7 @@ namespace KCMDeckBuilder
         {
             if (!cache.TryGetValue(c, out var s))
             {
-                s = c.name + "\n" + Plugin.DisplayName(c);
+                s = c.name + "\n" + CardRules.DisplayName(c);
                 try { foreach (var a in c.Abilities.Distinct()) s += "\n" + AbilityName(a); } catch { }
                 cache[c] = s;
             }
@@ -60,7 +60,7 @@ namespace KCMDeckBuilder
                 case "COST": return cards.OrderBy(c => c.BloodCost).ThenBy(c => c.BonesCost);
                 case "ATTACK": return cards.OrderByDescending(c => c.Attack).ThenByDescending(c => c.Health);
                 case "HEALTH": return cards.OrderByDescending(c => c.Health).ThenByDescending(c => c.Attack);
-                case "NAME": return cards.OrderBy(Plugin.DisplayName);
+                case "NAME": return cards.OrderBy(CardRules.DisplayName);
                 default: return cards;
             }
         }
@@ -68,7 +68,7 @@ namespace KCMDeckBuilder
         // 3 random regular cards (at least one costs exactly 1 blood) + 2 Rabbit Pelts; null if there aren't enough cards
         internal static List<CardInfo> RandomDeck(List<CardInfo> pool, Random rng)
         {
-            var regular = pool.Where(Plugin.IsRegularChoice).ToList();
+            var regular = pool.Where(CardRules.IsRegularChoice).ToList();
             var oneBlood = regular.Where(c => c.BloodCost == 1).ToList();
             if (oneBlood.Count == 0 || regular.Select(c => c.name).Distinct().Count() < 3) return null;
             var picks = new List<CardInfo> { oneBlood[rng.Next(oneBlood.Count)] };
@@ -91,8 +91,34 @@ namespace KCMDeckBuilder
             return null;
         }
 
+        // Why the deck can't be played, or null if it can
+        internal static string Validate(List<CardInfo> deck)
+        {
+            if (deck.Count == 0) return "Deck is empty.";
+            if (Plugin.MaxCards.Value > 0 && deck.Count > Plugin.MaxCards.Value) return $"Too many cards: {deck.Count} > {Plugin.MaxCards.Value}";
+            var tooMany = deck.GroupBy(c => c.name).FirstOrDefault(g => Plugin.MaxCopies.Value > 0 && g.Count() > Plugin.MaxCopies.Value);
+            if (tooMany != null) return $"Too many copies of '{tooMany.Key}'.";
+            return null;
+        }
+
+        // The pool's card for each ID (case-insensitive), or null where there is none (locked, or from a missing mod)
         internal static List<CardInfo> Resolve(IEnumerable<string> names, List<CardInfo> pool) =>
             names.Select(n => pool.Find(c => string.Equals(c.name, n, StringComparison.OrdinalIgnoreCase))).ToList();
+
+        // The deck in the config, checked against the current rules; null (with the reason logged) if it isn't valid
+        internal static List<CardInfo> DeckFromConfig()
+        {
+            var names = DeckCode.ParseList(Plugin.Deck.Value);
+            var deck = Resolve(names, CardRules.CardPool());
+            int missing = deck.IndexOf(null);
+            if (missing >= 0) { Plugin.Log.LogWarning($"Invalid or locked card: '{names[missing]}'"); return null; }
+
+            string err = Validate(deck);
+            if (err != null) { Plugin.Log.LogWarning(err); return null; }
+
+            Plugin.Log.LogInfo($"Using custom deck: {DeckCode.JoinList(deck.Select(c => c.name))}");
+            return deck;
+        }
 
         internal static string Cost(CardInfo c)
         {
@@ -110,7 +136,7 @@ namespace KCMDeckBuilder
         // Name, cost and stats, then one line per sigil with its rulebook text
         internal static string Describe(CardInfo c)
         {
-            string name = Plugin.DisplayName(c);
+            string name = CardRules.DisplayName(c);
             string s;
             try { s = $"{name.ToUpperInvariant()} - {Cost(c)}, {c.Attack}/{c.Health}"; }
             catch { s = name.ToUpperInvariant(); }
@@ -127,16 +153,18 @@ namespace KCMDeckBuilder
             return s;
         }
 
-        internal static void Totals(List<CardInfo> deck, out int blood, out int bones, out int atk, out int hp)
+        // "3 BLOOD  2 BONES  5 ATK  7 HP" for the deck panel
+        internal static string Totals(List<CardInfo> deck)
         {
-            blood = bones = atk = hp = 0;
+            int blood = 0, bones = 0, atk = 0, hp = 0;
             foreach (var c in deck) { blood += c.BloodCost; bones += c.BonesCost; atk += c.Attack; hp += c.Health; }
+            return $"{blood} BLOOD  {bones} BONES  {atk} ATK  {hp} HP";
         }
 
         // Saves the deck to the config and shows it on the deck screen
         internal static void SaveDeck(List<CardInfo> deck)
         {
-            Plugin.Deck.Value = string.Join(", ", deck.Select(c => c.name).ToArray());
+            Plugin.Deck.Value = DeckCode.JoinList(deck.Select(c => c.name));
             Plugin.Instance.Config.Save();
             Plugin.UpdateDeckInfo(deck);
         }

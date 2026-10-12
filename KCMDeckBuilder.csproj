@@ -28,6 +28,11 @@
     <EmbeddedResource Include="Resources\*.png" LogicalName="%(Filename)%(Extension)" />
   </ItemGroup>
 
+  <!-- The tests are their own project -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+  </ItemGroup>
+
   <Target Name="DownloadApi" BeforeTargets="ResolveAssemblyReferences" Condition="!Exists('$(ApiDir)\plugins\InscryptionAPI.dll')">
     <DownloadFile SourceUrl="https://thunderstore.io/package/download/API_dev/API/$(ApiVersion)/" DestinationFolder="$(ApiDir)" DestinationFileName="API.zip" />
     <Unzip SourceFiles="$(ApiDir)\API.zip" DestinationFolder="$(ApiDir)" />
