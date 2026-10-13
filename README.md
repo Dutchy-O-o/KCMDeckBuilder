@@ -10,6 +10,9 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 
 ![Deck builder](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/builder-all.png)
 
+**Watch it in action** (video, 2 minutes)
+[![KCM Deck Builder video](https://img.youtube.com/vi/2RcfC0f82Nw/maxresdefault.jpg)](https://www.youtube.com/watch?v=2RcfC0f82Nw)
+
 ## Features
 
 - In-game deck builder with Act 1 card faces: costs, sigils, stats, rare and gold cards.
