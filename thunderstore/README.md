@@ -23,7 +23,7 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 - **Pelts.** Start with Rabbit, Wolf or Golden Pelts and trade them at the first-node Trader.
 - **Boss cards** you can't normally get: Bait Bucket, Gold Nugget, Leaping Trap, Pack Mule, Skeleton Crew, Zombie Parrot and Strange Frog.
 - **Other cards** you can't normally draft: Boulder, Stump, Dam, Frozen Opossum, The Smoke and more.
-- **Your picks only.** No catch-up cards are added with the custom deck (no extra pelts, Opossum or Ring Worm after early losses). Cards other mods add at the start of a run are kept.
+- **Your picks only.** No catch-up cards are added with the custom deck (no extra pelts, Opossum or Ring Worm after early losses). Cards other mods add at the start of a run are kept. Giving up a custom deck run doesn't count toward those early losses either, so the normal decks are never affected.
 - **First-node Trader.** If your custom deck has pelts, the Trader on the first node is always there.
 - **No pointless lecture.** Leshy skips the "were you expecting more pelts?" punishment lines, since the custom deck gets no catch-up cards anyway.
 - **Feels like the game.** A real menu item to open it, the game's own cursor with its trail, the pointer hand, menu click sounds and blinking highlights.

@@ -50,6 +50,39 @@ namespace KCMDeckBuilder
         }
     }
 
+    // EndRun raises numRunsSinceReachedFirstBoss when a run is given up in the first region (and resets it otherwise),
+    // and that counter sets the catch-up cards of the next runs. A custom deck run leaves it as it was, so it never
+    // changes what the normal starter decks get. EndRun saves the game itself, so the save hook puts the value back
+    // before writing.
+    [HarmonyPatch(typeof(AscensionSaveData), nameof(AscensionSaveData.EndRun))]
+    internal static class EndRunPatch
+    {
+        internal static int? KeepCounter;
+
+        private static void Prefix(AscensionSaveData __instance)
+        {
+            KeepCounter = null;
+            try
+            {
+                if (__instance.currentRun != null && __instance.currentStarterDeck == Plugin.CustomDeckId)
+                    KeepCounter = __instance.numRunsSinceReachedFirstBoss;
+            }
+            catch (Exception e) { Plugin.Log.LogError("End run hook failed: " + e.Message); }
+        }
+
+        internal static void Restore(AscensionSaveData data)
+        {
+            if (KeepCounter.HasValue && data != null) data.numRunsSinceReachedFirstBoss = KeepCounter.Value;
+        }
+
+        private static Exception Finalizer(Exception __exception, AscensionSaveData __instance)
+        {
+            Restore(__instance);
+            KeepCounter = null;
+            return __exception;
+        }
+    }
+
     // Kaycee's Mod puts the trader on the first map node while numRunsSinceReachedFirstBoss < 2, to sell the
     // catch-up pelts it gives then. The custom deck gets no catch-up cards, so there the trader comes exactly when
     // the deck has pelts of its own.
@@ -95,6 +128,7 @@ namespace KCMDeckBuilder
             {
                 var data = SaveAccess.Data;
                 if (data == null) return;
+                EndRunPatch.Restore(data);
                 bool custom = data.currentStarterDeck == Plugin.CustomDeckId;
                 if (custom) { data.currentStarterDeck = Plugin.VanillaDeckId; __state = data; }
                 Plugin.CustomSelected = custom; // written to the modded save by the API right after the game saves
