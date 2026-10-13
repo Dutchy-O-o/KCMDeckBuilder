@@ -14,8 +14,8 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 
 - In-game deck builder with Act 1 card faces: costs, sigils, stats, rare and gold cards.
 - Filters: **ALL, PELTS, BOSS, OTHER, BLOOD, BONES, FREE, RARE**, and **MODDED** when card packs are installed.
-- **Sigils at a glance.** Hover a card to see its sigils with their icons and rulebook text in a box beside it.
-- **Search by name or sigil.** Type "airborne" to find every card with Airborne.
+- **Sigils at a glance.** Hover a card to see its sigils with their icons and rulebook text in a box beside it, along with special attack icons such as Ants, Mirror and Bell.
+- **Search by name, tribe or sigil.** Type "airborne" to find every card with Airborne, or "bird" for every Bird.
 - **Sort** by cost, attack, health or name. Your deck shows its total blood, bones, attack and health.
 - **Card packs.** Cards from other mods (JSONLoader packs, Lobotomy Mod and others) show up with their art and sigils in their own MODDED tab. With several mods installed, the **PACK** button shows the cards of one mod at a time (or only the base game's).
 - **Share codes.** COPY CODE puts your deck in the clipboard as a short code (`KCM:...`) to post anywhere; PASTE CODE loads one.
@@ -42,6 +42,9 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 
 **One mod at a time with the PACK button**
 ![Pack filter](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/packs.png)
+
+**Hover a card to read its sigils**
+![Sigils](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/sigils.png)
 
 **Search by sigil, sort by attack or health**
 ![Search](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/search.png)

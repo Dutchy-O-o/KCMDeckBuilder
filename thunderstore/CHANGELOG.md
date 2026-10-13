@@ -1,6 +1,6 @@
 ## 2.1.0
 - PACK button: with several card mods installed, show the cards of one mod at a time, or only the base game's. Works together with the filter tabs, search and sort.
-- Hover a card to see a box beside it with its cost, stats and every sigil (icon, name and rulebook text), plus the mod it comes from. The card ID list (KCMDeckBuilder_cards.txt) has a mod column too.
+- Hover a card to see a box beside it with its cost, stats and every sigil (icon, name and rulebook text), special attack icons such as Ants or Mirror, its tribes and the mod it comes from. The search box finds tribes too ("bird", "insect"). The card ID list (KCMDeckBuilder_cards.txt) has a mod column too.
 - Deleting a saved deck now asks first: X turns into a DELETE? button for a few seconds.
 - Lighter on the game: next to no work outside the builder, long deck lists only draw the rows you can see, and texts are no longer rebuilt every frame.
 - Code cleanup: the source is split by responsibility and the share code format has tests.

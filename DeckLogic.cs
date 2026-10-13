@@ -73,12 +73,12 @@ namespace KCMDeckBuilder
             }
         }
 
-        // What the search box looks at: ID, name and sigil names
+        // What the search box looks at: ID, name, tribes and sigil names
         private static string SearchText(CardInfo c, Dictionary<CardInfo, string> cache)
         {
             if (!cache.TryGetValue(c, out var s))
             {
-                s = c.name + "\n" + CardRules.DisplayName(c);
+                s = c.name + "\n" + CardRules.DisplayName(c) + "\n" + string.Join("\n", Tribes(c).ToArray());
                 try { foreach (var a in c.Abilities.Distinct()) s += "\n" + AbilityName(a); } catch { }
                 cache[c] = s;
             }
@@ -165,26 +165,49 @@ namespace KCMDeckBuilder
             catch { return a.ToString(); }
         }
 
-        // Name, cost and stats
+        // The card's special stat icon (Ants, Mirror, Bell, ...), or null if it has none
+        private static StatIconInfo StatIcon(CardInfo c)
+        {
+            try { return c.SpecialStatIcon != SpecialStatIcon.None ? StatIconInfo.GetIconInfo(c.SpecialStatIcon) : null; }
+            catch { return null; }
+        }
+
+        // The card's tribes (Bird, Canine, ...) by name; tribes added by mods without a name are left out
+        internal static List<string> Tribes(CardInfo c)
+        {
+            try { return c.tribes.Distinct().Where(t => t != Tribe.None && Enum.IsDefined(typeof(Tribe), t)).Select(t => t.ToString().ToUpperInvariant()).ToList(); }
+            catch { return new List<string>(); }
+        }
+
+        // Name, cost and stats; an attack set by a stat icon shows as "?", like the "?" a card face can't print
         internal static string Header(CardInfo c)
         {
             string name = CardRules.DisplayName(c).ToUpperInvariant();
-            try { return $"{name} - {Cost(c)}, {c.Attack}/{c.Health}".ToUpperInvariant(); }
+            try
+            {
+                var stat = StatIcon(c);
+                string atk = stat != null && StatIconInfo.IconAppliesToAttack(c.SpecialStatIcon) ? "?" : c.Attack.ToString();
+                return $"{name} - {Cost(c)}, {atk}/{c.Health}".ToUpperInvariant();
+            }
             catch { return name; }
         }
 
-        // Each sigil once, with its rulebook name and text
-        internal static List<KeyValuePair<Ability, string>> Sigils(CardInfo c)
+        // The stat icon, then each sigil once, with its icon, rulebook name and text
+        internal static List<KeyValuePair<UnityEngine.Texture, string>> Sigils(CardInfo c)
         {
-            var list = new List<KeyValuePair<Ability, string>>();
+            var list = new List<KeyValuePair<UnityEngine.Texture, string>>();
             string name = CardRules.DisplayName(c);
+            var stat = StatIcon(c);
+            if (stat != null && !string.IsNullOrEmpty(stat.rulebookName))
+                list.Add(new KeyValuePair<UnityEngine.Texture, string>(stat.iconGraphic,
+                    $"{stat.rulebookName.ToUpperInvariant()}: {(stat.rulebookDescription ?? "").Replace("[creature]", name)}"));
             try
             {
                 foreach (var a in c.Abilities.Distinct())
                 {
                     string d;
                     try { d = AbilitiesUtil.GetInfo(a)?.LocalizedRulebookDescription ?? ""; } catch { d = ""; }
-                    list.Add(new KeyValuePair<Ability, string>(a, $"{AbilityName(a).ToUpperInvariant()}: {d.Replace("[creature]", name)}"));
+                    list.Add(new KeyValuePair<UnityEngine.Texture, string>(CardFace.Sigil(a), $"{AbilityName(a).ToUpperInvariant()}: {d.Replace("[creature]", name)}"));
                 }
             }
             catch (Exception e) { CardFace.Report(c, "sigils", e); }

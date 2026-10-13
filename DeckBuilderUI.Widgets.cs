@@ -128,6 +128,23 @@ namespace KCMDeckBuilder
             return widths[s] = text.CalcSize(new GUIContent(s)).x * m;
         }
 
+        // Height of the text wrapped to a width, in 720p units
+        private readonly Dictionary<string, float> heightCache = new Dictionary<string, float>();
+        private float heightU;
+        private float WrappedHeight(string s, int size, float width)
+        {
+            if (heightU != u) { heightCache.Clear(); heightU = u; }
+            string key = size + "|" + width + "|" + s;
+            if (heightCache.TryGetValue(key, out var h)) return h;
+            int m = TextScale(size);
+            text.fontSize = m == 1 ? F(size) : 0;
+            bool wrap = text.wordWrap;
+            text.wordWrap = true;
+            h = text.CalcHeight(new GUIContent(s), width * u / m) * m / u;
+            text.wordWrap = wrap;
+            return heightCache[key] = h;
+        }
+
         private void Dash(Rect r) =>
             GUI.DrawTextureWithTexCoords(r, texDash, new Rect(0, 0, r.width / (8f * u), 1));
 

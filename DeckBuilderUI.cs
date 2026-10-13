@@ -305,13 +305,13 @@ namespace KCMDeckBuilder
             tip = new CardTip
             {
                 header = DeckLogic.Header(c),
-                pack = packNames.TryGetValue(c.name, out var p) ? "FROM " + p : null,
-                sigils = DeckLogic.Sigils(c).Select(s => new KeyValuePair<Texture, string>(CardFace.Sigil(s.Key), s.Value)).ToList(),
+                pack = string.Join("  ", DeckLogic.Tribes(c).Concat(packNames.TryGetValue(c.name, out var p) ? new[] { "FROM " + p } : new string[0]).ToArray()),
+                sigils = DeckLogic.Sigils(c),
             };
             return tipCache[c] = tip;
         }
 
-        // The hovered card's name, stats, mod and sigils in a box beside it (on the other side if there is no room)
+        // The hovered card's name, stats, tribes, mod and sigils in a box beside it (on the other side if there is no room)
         private void DrawCardTip()
         {
             if (hovered == null) return;
@@ -319,8 +319,9 @@ namespace KCMDeckBuilder
             const float w = 340f, inset = 10f, icon = 26f, gap = 8f, lineH = 18f;
             float textW = w - inset * 2 - icon - gap;
 
-            float h = inset * 2 + lineH + (tip.pack != null ? lineH : 0);
-            foreach (var s in tip.sigils) h += 8 + Mathf.Max(icon, TextLines(s.Value, 14, textW) * lineH);
+            float headerH = Mathf.Max(lineH, WrappedHeight(tip.header, 16, w - inset * 2));
+            float h = inset * 2 + headerH + (tip.pack.Length > 0 ? lineH : 0);
+            foreach (var s in tip.sigils) h += 8 + Mathf.Max(icon, WrappedHeight(s.Value, 14, textW));
 
             var box = new Rect(hoveredRect.xMax + 10 * u, 0, w * u, h * u);
             if (box.xMax > vw - 4 * u) box.x = hoveredRect.x - 10 * u - box.width;
@@ -329,9 +330,11 @@ namespace KCMDeckBuilder
             GUI.Box(box, GUIContent.none, frame);
 
             float x = box.x + inset * u, y = box.y + inset * u;
-            Label(new Rect(x, y, (w - inset * 2) * u, lineH * u), tip.header, 16, RedBright, TextAnchor.MiddleLeft);
-            y += lineH * u;
-            if (tip.pack != null)
+            text.wordWrap = true;
+            Label(new Rect(x, y, (w - inset * 2) * u, headerH * u), tip.header, 16, RedBright, TextAnchor.MiddleLeft);
+            text.wordWrap = false;
+            y += headerH * u;
+            if (tip.pack.Length > 0)
             {
                 Label(new Rect(x, y, (w - inset * 2) * u, lineH * u), tip.pack, 14, Red, TextAnchor.MiddleLeft);
                 y += lineH * u;
@@ -348,16 +351,12 @@ namespace KCMDeckBuilder
                 GUI.DrawTexture(iconRect, Texture2D.whiteTexture);
                 GUI.color = prev;
                 if (s.Key != null) GUI.DrawTexture(iconRect, s.Key);
-                float rowH = Mathf.Max(icon, TextLines(s.Value, 14, textW) * lineH);
+                float rowH = Mathf.Max(icon, WrappedHeight(s.Value, 14, textW));
                 Label(new Rect(x + (icon + gap) * u, y, textW * u, rowH * u), s.Value, 14, Red, TextAnchor.UpperLeft);
                 y += rowH * u;
             }
             text.wordWrap = false;
         }
-
-        // Roughly how many lines the text wraps to in a width (in 720p units)
-        private int TextLines(string s, int size, float width) =>
-            Mathf.Max(1, Mathf.CeilToInt(Measure(s, size) / (width * u * 0.92f)));
 
         private void DrawGrid(Rect view)
         {
