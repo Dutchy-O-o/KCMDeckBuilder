@@ -58,7 +58,7 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 **Settings, right in the builder**
 ![Settings](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/settings.png)
 
-**Your run starts with exactly the cards you picked**
+**Your run starts with exactly the cards you picked, and challenges still apply (here Annoying Starters adds its sigil to every card)**
 ![Run start](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/run-start.png)
 
 **Pelts in your deck? The Trader is waiting on the first node**
