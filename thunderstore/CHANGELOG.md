@@ -1,3 +1,6 @@
+## 2.1.1
+- Fix: with a custom deck that has no pelts, the Trader no longer appears on the first map node. The game puts it there to sell the extra pelts it gives after early losses; the custom deck doesn't get those pelts, so now the Trader comes only when your own deck has pelts.
+
 ## 2.1.0
 - PACK button: with several card mods installed, show the cards of one mod at a time, or only the base game's. Works together with the filter tabs, search and sort.
 - Hover a card to see a box beside it with its cost, stats and every sigil (icon, name and rulebook text), special attack icons such as Ants or Mirror, its tribes and the mod it comes from. The search box finds tribes too ("bird", "insect"). The card ID list (KCMDeckBuilder_cards.txt) has a mod column too.

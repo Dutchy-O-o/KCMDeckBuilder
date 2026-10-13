@@ -50,8 +50,9 @@ namespace KCMDeckBuilder
         }
     }
 
-    // Kaycee's Mod only puts the trader on the first map node while numRunsSinceReachedFirstBoss < 2.
-    // With a custom deck that has pelts, always give the player that trader.
+    // Kaycee's Mod puts the trader on the first map node while numRunsSinceReachedFirstBoss < 2, to sell the
+    // catch-up pelts it gives then. The custom deck gets no catch-up cards, so there the trader comes exactly when
+    // the deck has pelts of its own.
     [HarmonyPatch(typeof(MapGenerator), "ForceFirstNodeTraderForAscension")]
     internal static class FirstTraderPatch
     {
@@ -59,9 +60,9 @@ namespace KCMDeckBuilder
         {
             try
             {
-                if (__result || !SaveFile.IsAscension || rowIndex != 1 || RunState.Run.regionTier != 0) return;
+                if (!SaveFile.IsAscension || rowIndex != 1 || RunState.Run.regionTier != 0) return;
                 if (AscensionSaveData.Data.currentStarterDeck != Plugin.CustomDeckId) return;
-                if (RunState.Run.playerDeck.Cards.Exists(CardRules.IsPelt)) __result = true;
+                __result = RunState.Run.playerDeck.Cards.Exists(CardRules.IsPelt);
             }
             catch (Exception e) { Plugin.Log.LogError("Trader hook failed: " + e.Message); }
         }
