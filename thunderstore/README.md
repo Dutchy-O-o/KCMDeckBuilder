@@ -44,7 +44,10 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 **Hover a card to read its sigils**
 ![Sigils](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/sigils.png)
 
-**Search by sigil, sort by attack or health**
+**Special attack icons and tribes too**
+![Stat icons](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/stat-icons.png)
+
+**Search by name, tribe or sigil, sort by attack or health**
 ![Search](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/search.png)
 
 **Saved decks and share codes**
