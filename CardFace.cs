@@ -195,6 +195,49 @@ namespace KCMDeckBuilder
             foreach (var d in info.decals) GUI.DrawTextureWithTexCoords(r, d, uv);
         }
 
+        // A card with just a name and a picture in the portrait window, for things that aren't cards (items, tribes,
+        // sigils), so they look like the rest of the builder
+        private static readonly Dictionary<string, int> plainNameFit = new Dictionary<string, int>(); // "size|name" -> fitted size
+        internal static void DrawPlain(Rect r, string name, Texture icon, Rect iconUv, float iconAspect, bool gold = false)
+        {
+            Load();
+            float k = r.width / W;
+            Rect P(float x, float y, float w, float h) => new Rect(r.x + x * k, r.y + y * k, w * k, h * k);
+
+            var prevColor = GUI.color;
+            GUI.color = gold ? Gold : Paper;
+            if (bg != null) GUI.DrawTexture(r, bg);
+            else GUI.DrawTexture(r, Texture2D.whiteTexture);
+            GUI.color = prevColor;
+
+            if (icon != null)
+            {
+                // Centered in the portrait window, as large as fits
+                var win = P(12, 38, 100, 82);
+                float w = win.width, h = win.height;
+                if (w / h > iconAspect) w = h * iconAspect; else h = w / iconAspect;
+                GUI.DrawTextureWithTexCoords(new Rect(win.center.x - w / 2, win.center.y - h / 2, w, h), icon, iconUv);
+            }
+
+            if (text == null)
+            {
+                text = new GUIStyle(GUI.skin.label) { alignment = TextAnchor.UpperLeft, padding = new RectOffset(0, 0, 0, 0), margin = new RectOffset(0, 0, 0, 0), wordWrap = false };
+                if (font != null) text.font = font; else text.fontStyle = FontStyle.Bold;
+            }
+            text.normal.textColor = Ink;
+            text.alignment = TextAnchor.MiddleCenter;
+            int size = Mathf.Max(1, Mathf.RoundToInt(22 * k));
+            string key = size + "|" + name;
+            if (!plainNameFit.TryGetValue(key, out int fit))
+            {
+                text.fontSize = size;
+                float avail = 115 * k, wName = text.CalcSize(new GUIContent(name)).x;
+                plainNameFit[key] = fit = wName > avail ? Mathf.Max(1, Mathf.FloorToInt(size * avail / wName)) : size;
+            }
+            text.fontSize = fit;
+            GUI.Label(P(5, 4, 115, 28), name, text);
+        }
+
         internal static void Draw(Rect r, CardInfo c)
         {
             Load();

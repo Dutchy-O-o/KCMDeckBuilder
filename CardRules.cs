@@ -64,6 +64,44 @@ namespace KCMDeckBuilder
         internal static string PluginName(string guid) =>
             Chainloader.PluginInfos.TryGetValue(guid, out var p) && !string.IsNullOrEmpty(p.Metadata.Name) ? p.Metadata.Name : null;
 
+        // The mod behind something the API named "<plugin GUID>_<name>" (modded sigils and items), or null
+        private static readonly Dictionary<string, string> assetMods = new Dictionary<string, string>();
+        internal static string ModOfAsset(string assetName)
+        {
+            if (string.IsNullOrEmpty(assetName)) return null;
+            if (assetMods.TryGetValue(assetName, out var mod)) return mod;
+            try
+            {
+                string guid = Chainloader.PluginInfos.Keys.Where(g => assetName.StartsWith(g + "_", StringComparison.Ordinal))
+                    .OrderByDescending(g => g.Length).FirstOrDefault();
+                mod = guid != null ? PluginName(guid) ?? guid : null;
+            }
+            catch { mod = null; }
+            return assetMods[assetName] = mod;
+        }
+
+        // The mod that added a sigil, or null for the game's own. The API records who added it; mods don't always
+        // use their plugin GUID there, so the plugin whose code runs the sigil is the fallback.
+        private static readonly Dictionary<Ability, string> sigilMods = new Dictionary<Ability, string>();
+        internal static string ModOfSigil(Ability a)
+        {
+            if (sigilMods.TryGetValue(a, out var mod)) return mod;
+            try
+            {
+                var full = AbilityManager.AllAbilities.Find(f => f.Id == a);
+                if (full != null && !string.IsNullOrEmpty(full.ModGUID))
+                {
+                    var asm = full.AbilityBehavior?.Assembly;
+                    mod = PluginName(full.ModGUID)
+                        ?? Chainloader.PluginInfos.Values.Where(p => asm != null && p.Instance != null && p.Instance.GetType().Assembly == asm)
+                            .Select(p => p.Metadata.Name).FirstOrDefault()
+                        ?? full.ModGUID;
+                }
+            }
+            catch { mod = null; }
+            return sigilMods[a] = mod;
+        }
+
         // English name, falling back to the ID for cards (usually from other mods) that have none
         internal static string DisplayName(CardInfo c)
         {

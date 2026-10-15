@@ -18,10 +18,13 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 - **Sigils at a glance.** Hover a card to see its sigils with their icons and rulebook text in a box beside it, along with special attack icons such as Ants, Mirror and Bell.
 - **Search by name, tribe or sigil.** Type "airborne" to find every card with Airborne, or "bird" for every Bird.
 - **Sort** by cost, attack, health or name. Your deck shows its total blood, bones, attack and health.
-- **Card packs.** Cards from other mods (JSONLoader packs, Lobotomy Mod and others) show up with their art and sigils in their own MODDED tab. With several mods installed, the **PACK** button shows the cards of one mod at a time (or only the base game's).
-- **Share codes.** COPY CODE puts your deck in the clipboard as a short code (`KCM:...`) to post anywhere; PASTE CODE loads one.
+- **Card packs.** Cards from other mods (JSONLoader packs, Lobotomy Mod and others) show up with their art and sigils in their own MODDED tab. With several mods installed, the **PACK** button shows the cards of one mod at a time (or only the base game's). Tribes, sigils and items from mods (added through the API) can be picked for the totem and the starting items too, and the hover box says which mod they come from.
+- **Share codes.** COPY CODE puts your deck, items and totem in the clipboard as a short code (`KCM:...`) to post anywhere; PASTE CODE loads one. Codes from older versions still work.
 - **Saved decks.** Name and save your decks, then load them again from the DECKS list.
 - **Random deck.** Press RANDOM for 3 random regular cards (one of them always costs 1 blood) plus 2 Rabbit Pelts. Press again to reroll.
+- **Starting items.** On the ITEMS page, pick the items your run starts with: up to 3, the same one more than once if you like, or RANDOM. None picked means the game's usual items. The last slot is marked, since the Less Consumables challenge (picked after this screen) takes it away.
+- **Starting totem.** On the TOTEM page, pick a head (tribe) and a base (sigil), or press RANDOM. The totem stands on the table from the first battle, and its pieces also go to your inventory, so the Woodcarver lets you rebuild it.
+- **Right-click to take a card out** of your deck straight from the card grid.
 - **In-game settings.** Change the card limit, the copy limit, unlocked-only and boss/special cards from the SETTINGS page.
 - **Pelts.** Start with Rabbit, Wolf or Golden Pelts and trade them at the first-node Trader.
 - **Boss cards** you can't normally get: Bait Bucket, Gold Nugget, Leaping Trap, Pack Mule, Skeleton Crew, Zombie Parrot and Strange Frog.
@@ -56,6 +59,18 @@ The custom deck is a separate starter deck with its own icon. The game's own sta
 **Saved decks and share codes**
 ![Saved decks](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/saved-decks.png)
 
+**Pick the items your run starts with**
+![Items](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/items.png)
+
+**Start with a totem: pick its head and its base**
+![Totem](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/totem.png)
+
+**The totem stands on the table from the first battle, and your items are there too**
+![Totem in battle](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/totem-battle.png)
+
+**Its pieces stay with you, so the Woodcarver can rebuild it**
+![Woodcarver](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/woodcarver.png)
+
 **Settings, right in the builder**
 ![Settings](https://raw.githubusercontent.com/Dutchy-O-o/KCMDeckBuilder/main/docs/settings.png)
 
@@ -75,6 +90,8 @@ Also on the SETTINGS page in the builder. File: `BepInEx/config/emre.inscryption
 | `MaxCopiesPerCard` | 0 | Copies of one card (0 = no limit) |
 | `OnlyUnlockedCards` | true | Only offer cards you have unlocked |
 | `AllowBossAndSpecialCards` | true | Show the BOSS and OTHER cards |
+| `Items` | (empty) | Starting item IDs, e.g. `Pliers, FishHook` (empty = the game's usual items) |
+| `Totem` | (empty) | Starting totem as `Tribe:Sigil`, e.g. `Bird:Flying` (empty = none) |
 
 The deck is saved in the same file (`Cards = ...`). A list of valid card IDs is written to `BepInEx/config/KCMDeckBuilder_cards.txt` when you open the builder. Saved decks live in `BepInEx/config/KCMDeckBuilder_decks.txt`.
 

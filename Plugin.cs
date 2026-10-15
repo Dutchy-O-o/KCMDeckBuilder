@@ -16,7 +16,7 @@ using UnityEngine;
 namespace KCMDeckBuilder
 {
     // Entry point: config, the custom starter deck registered with the API, and the "custom deck selected" flag
-    [BepInPlugin(Guid, "KCM Deck Builder", "2.1.1")]
+    [BepInPlugin(Guid, "KCM Deck Builder", "2.2.0")]
     [BepInDependency(InscryptionAPIPlugin.ModGUID)]
     public class Plugin : BaseUnityPlugin
     {
@@ -32,6 +32,8 @@ namespace KCMDeckBuilder
         internal static ConfigEntry<int> MaxCopies;
         internal static ConfigEntry<bool> OnlyUnlocked;
         internal static ConfigEntry<bool> AllowSpecial;
+        internal static ConfigEntry<string> Items;
+        internal static ConfigEntry<string> Totem;
         private static ConfigEntry<bool> legacySelected;
         private static StarterDeckManager.FullStarterDeck apiDeck;
 
@@ -46,6 +48,10 @@ namespace KCMDeckBuilder
             MaxCopies = Config.Bind("Rules", "MaxCopiesPerCard", 0, "Maximum copies of the same card. 0 = no limit.");
             OnlyUnlocked = Config.Bind("Rules", "OnlyUnlockedCards", true, "Only allow cards you have unlocked.");
             AllowSpecial = Config.Bind("Rules", "AllowBossAndSpecialCards", true, "Allow boss-only cards and other cards you can't normally draft (terrain, Dam, ...).");
+            Items = Config.Bind("Run start", "Items", "",
+                "Comma-separated item IDs the custom deck run starts with (at most 3). Empty = the game's usual items. Usually set on the ITEMS & TOTEM page.");
+            Totem = Config.Bind("Run start", "Totem", "",
+                "Totem the custom deck run starts with, as Tribe:Sigil (e.g. Bird:Flying). Empty = no totem. Usually set on the ITEMS & TOTEM page.");
             legacySelected = Config.Bind("Internal", "CustomDeckSelected", false, "Only read when upgrading from 1.x. The choice is now kept in the API's ModdedSaveFile.gwsave.");
             DeckStorage.Init(Paths.ConfigPath);
 

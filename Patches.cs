@@ -42,6 +42,14 @@ namespace KCMDeckBuilder
             data.numRunsSinceReachedFirstBoss = -1;
         }
 
+        // The items and totem picked in the builder replace the run's usual ones
+        private static void Postfix(AscensionSaveData __instance, int? __state)
+        {
+            if (!__state.HasValue) return;
+            try { RunStart.Apply(__instance.currentRun); }
+            catch (Exception e) { Plugin.Log.LogError("Could not set the starting items and totem: " + e); }
+        }
+
         // Runs even if NewRun throws, so the counter is always restored
         private static Exception Finalizer(Exception __exception, int? __state)
         {

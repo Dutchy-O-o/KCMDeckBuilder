@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DiskCardGame;
+using InscryptionAPI.Card;
 
 namespace KCMDeckBuilder
 {
@@ -172,10 +173,14 @@ namespace KCMDeckBuilder
             catch { return null; }
         }
 
-        // The card's tribes (Bird, Canine, ...) by name; tribes added by mods without a name are left out
+        // The card's tribes (Bird, Canine, ...) by name, including tribes added by mods through the API
         internal static List<string> Tribes(CardInfo c)
         {
-            try { return c.tribes.Distinct().Where(t => t != Tribe.None && Enum.IsDefined(typeof(Tribe), t)).Select(t => t.ToString().ToUpperInvariant()).ToList(); }
+            try
+            {
+                return c.tribes.Distinct().Where(t => t != Tribe.None && (Enum.IsDefined(typeof(Tribe), t) || TribeManager.IsCustomTribe(t)))
+                    .Select(t => RunStart.TribeName(t).ToUpperInvariant()).ToList();
+            }
             catch { return new List<string>(); }
         }
 
@@ -221,18 +226,20 @@ namespace KCMDeckBuilder
             return $"{blood} BLOOD  {bones} BONES  {atk} ATK  {hp} HP";
         }
 
-        // Saves the deck to the config and shows it on the deck screen
-        internal static void SaveDeck(List<CardInfo> deck)
+        // Saves the deck, items and totem to the config and shows the deck on the deck screen
+        internal static void SaveDeck(List<CardInfo> deck, List<string> items, string totem)
         {
             Plugin.Deck.Value = DeckCode.JoinList(deck.Select(c => c.name));
+            Plugin.Items.Value = DeckCode.JoinList(items);
+            Plugin.Totem.Value = totem ?? "";
             Plugin.Instance.Config.Save();
             Plugin.UpdateDeckInfo(deck);
         }
 
         // Same as clicking one of the game's deck icons: select the deck and go to the challenge screen
-        internal static void StartWithDeck(List<CardInfo> deck)
+        internal static void StartWithDeck(List<CardInfo> deck, List<string> items, string totem)
         {
-            SaveDeck(deck);
+            SaveDeck(deck, items, totem);
             AscensionSaveData.Data.currentStarterDeck = Plugin.CustomDeckId;
             Plugin.Log.LogInfo($"Custom deck selected: {Plugin.Deck.Value}");
             AscensionMenuScreens.Instance.SwitchToScreen(AscensionMenuScreens.Screen.SelectChallenges);

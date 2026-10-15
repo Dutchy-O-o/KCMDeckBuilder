@@ -15,7 +15,7 @@ namespace KCMDeckBuilder
 
         private static readonly string[] SortLabels = DeckLogic.Sorts.Select(s => "SORT: " + s).ToArray();
 
-        private enum Page { Cards, Decks, Settings }
+        private enum Page { Cards, Items, Totem, Decks, Settings }
 
         private readonly GameCursor cursor = new GameCursor();
         private readonly System.Random rng = new System.Random();
@@ -56,6 +56,7 @@ namespace KCMDeckBuilder
         private readonly Dictionary<CardInfo, string> searchCache = new Dictionary<CardInfo, string>();
         private readonly Dictionary<CardInfo, CardTip> tipCache = new Dictionary<CardInfo, CardTip>();
         private readonly Dictionary<string, List<CardInfo>> savedCardsCache = new Dictionary<string, List<CardInfo>>();
+        private readonly Dictionary<string, string> savedExtrasCache = new Dictionary<string, string>();
         private readonly Dictionary<string, string> upperCache = new Dictionary<string, string>();
 
         private bool OnDeckScreen =>
@@ -140,13 +141,15 @@ namespace KCMDeckBuilder
             var sw = System.Diagnostics.Stopwatch.StartNew();
             Plugin.Instance.Config.Reload();
             RebuildPool();
+            double poolMs = sw.Elapsed.TotalMilliseconds;
             SetDeck(DeckLogic.Resolve(DeckCode.ParseList(Plugin.Deck.Value), pool).Where(c => c != null).ToList());
+            SetExtras(DeckCode.ParseList(Plugin.Items.Value), Plugin.Totem.Value);
             savedDecks = DeckStorage.LoadSavedDecks();
             // Written here rather than at the menu: by now the deck screen has loaded the starter decks, so this is cheap
             DeckStorage.WriteCardList(pool, packNames);
             page = Page.Cards;
             open = true;
-            Plugin.Log.LogDebug($"Deck builder opened in {sw.Elapsed.TotalMilliseconds:0.0} ms ({pool.Count} cards).");
+            Plugin.Log.LogDebug($"Deck builder opened in {sw.Elapsed.TotalMilliseconds:0.0} ms ({pool.Count} cards; rules and lists {poolMs:0.0} ms).");
             CommandLineTextDisplayer.PlayCommandLineClickSound();
             cursor.Take(true);
             lastHoverKey = hoverKey = 0;
@@ -156,11 +159,12 @@ namespace KCMDeckBuilder
         {
             if (save)
             {
-                DeckLogic.SaveDeck(deck);
-                Plugin.Log.LogInfo($"Deck saved: {Plugin.Deck.Value}");
+                DeckLogic.SaveDeck(deck, startItems, TotemValue);
+                Plugin.Log.LogInfo($"Deck saved: {Plugin.Deck.Value}" + (extrasText != null ? $" ({extrasText})" : ""));
             }
             open = false;
             hovered = null;
+            hoverTip = null;
             cursor.Take(false);
             lastHoverKey = hoverKey = 0;
         }
@@ -182,6 +186,7 @@ namespace KCMDeckBuilder
             packs = DeckLogic.Packs(packNames);
             packLabels = packs.Select(p => "PACK: " + p).ToArray();
             pack = Mathf.Max(0, Array.IndexOf(packs, selectedPack));
+            RebuildExtras();
         }
 
         private void SetDeck(List<CardInfo> cards)
@@ -219,23 +224,28 @@ namespace KCMDeckBuilder
             Label(R(0, 22, lw, 40), "BUILD YOUR DECK", 30, Red, TextAnchor.MiddleCenter);
             if (FrameButton(R(lw - pad - 150, 27, 150, 32), page == Page.Settings ? "CARDS" : "SETTINGS", false, 15))
                 page = page == Page.Settings ? Page.Cards : Page.Settings;
+            if (FrameButton(R(lw - pad - 150 - 12 - 130, 27, 130, 32), page == Page.Totem ? "CARDS" : "TOTEM", false, 15))
+                page = page == Page.Totem ? Page.Cards : Page.Totem;
+            if (FrameButton(R(lw - pad - 150 - 24 - 260, 27, 130, 32), page == Page.Items ? "CARDS" : "ITEMS", false, 15))
+                page = page == Page.Items ? Page.Cards : Page.Items;
             Dash(R(0, 70, lw, 2));
 
             float rightW = 330f;
             float leftW = lw - rightW - pad * 3;
             float y = 84;
 
-            float fx = pad;
-            foreach (var f in filters)
-            {
-                float w = Mathf.Max(60f, Measure(f, 16) / u + 24);
-                if (TabButton(R(fx, y, w, 28), f, page == Page.Cards && f == filter)) { filter = f; page = Page.Cards; }
-                fx += w + 8;
-            }
-
-            float top = y + 40;
+            // The filter tabs and the search row belong to the card grid only
+            float top = y;
             if (page == Page.Cards)
             {
+                float fx = pad;
+                foreach (var f in filters)
+                {
+                    float w = Mathf.Max(60f, Measure(f, 16) / u + 24);
+                    if (TabButton(R(fx, y, w, 28), f, f == filter)) filter = f;
+                    fx += w + 8;
+                }
+                top += 40;
                 DrawSearchRow(top, leftW, pad);
                 top += 38;
             }
@@ -243,8 +253,11 @@ namespace KCMDeckBuilder
             var view = R(pad, top, leftW, 0);
             view.height = vh - view.y - 92 * u;
             hovered = null;
+            hoverTip = null;
             if (page == Page.Decks) DrawSavedDecks(view);
             else if (page == Page.Settings) DrawSettings(view);
+            else if (page == Page.Items) DrawItems(view);
+            else if (page == Page.Totem) DrawTotem(view);
             else DrawGrid(view);
 
             DrawFooter(leftW, pad);
@@ -289,7 +302,9 @@ namespace KCMDeckBuilder
             text.wordWrap = true;
             if (page == Page.Decks) Label(info, "SAVE YOUR DECK UNDER A NAME, OR SHARE IT: COPY CODE PUTS IT IN YOUR CLIPBOARD, PASTE CODE LOADS ONE.", 14, RedDim, TextAnchor.UpperLeft);
             else if (page == Page.Settings) Label(info, "CHANGES ARE SAVED RIGHT AWAY.", 14, RedDim, TextAnchor.UpperLeft);
-            else Label(info, "CLICK A CARD TO ADD IT. HOVER IT TO READ ITS SIGILS.  ESC OR X TO GO BACK.", 14, RedDim, TextAnchor.UpperLeft);
+            else if (page == Page.Items) Label(info, "THE ITEMS YOUR RUN STARTS WITH. CLICK AN ITEM TO ADD IT, RIGHT-CLICK TO TAKE ONE OUT.", 14, RedDim, TextAnchor.UpperLeft);
+            else if (page == Page.Totem) Label(info, "A TOTEM READY FROM THE FIRST BATTLE. PICK A HEAD AND A BASE; CLICK AGAIN TO DROP ONE. HOVER A SIGIL TO READ IT.", 14, RedDim, TextAnchor.UpperLeft);
+            else Label(info, "CLICK A CARD TO ADD IT, RIGHT-CLICK TO TAKE ONE OUT. HOVER IT TO READ ITS SIGILS.  ESC OR X TO GO BACK.", 14, RedDim, TextAnchor.UpperLeft);
             text.wordWrap = false;
         }
 
@@ -314,14 +329,15 @@ namespace KCMDeckBuilder
         // The hovered card's name, stats, tribes, mod and sigils in a box beside it (on the other side if there is no room)
         private void DrawCardTip()
         {
-            if (hovered == null) return;
-            var tip = GetTip(hovered);
+            if (hovered == null && hoverTip == null) return;
+            var tip = hoverTip ?? GetTip(hovered);
             const float w = 340f, inset = 10f, icon = 26f, gap = 8f, lineH = 18f;
             float textW = w - inset * 2 - icon - gap;
 
             float headerH = Mathf.Max(lineH, WrappedHeight(tip.header, 16, w - inset * 2));
-            float h = inset * 2 + headerH + (tip.pack.Length > 0 ? lineH : 0);
-            foreach (var s in tip.sigils) h += 8 + Mathf.Max(icon, WrappedHeight(s.Value, 14, textW));
+            float packH = tip.pack.Length > 0 ? Mathf.Max(lineH, WrappedHeight(tip.pack, 14, w - inset * 2)) : 0;
+            float h = inset * 2 + headerH + packH;
+            foreach (var s in tip.sigils) h += 8 + (s.Key != null ? Mathf.Max(icon, WrappedHeight(s.Value, 14, textW)) : WrappedHeight(s.Value, 14, w - inset * 2));
 
             var box = new Rect(hoveredRect.xMax + 10 * u, 0, w * u, h * u);
             if (box.xMax > vw - 4 * u) box.x = hoveredRect.x - 10 * u - box.width;
@@ -336,14 +352,24 @@ namespace KCMDeckBuilder
             y += headerH * u;
             if (tip.pack.Length > 0)
             {
-                Label(new Rect(x, y, (w - inset * 2) * u, lineH * u), tip.pack, 14, Red, TextAnchor.MiddleLeft);
-                y += lineH * u;
+                text.wordWrap = true;
+                Label(new Rect(x, y, (w - inset * 2) * u, packH * u), tip.pack, 14, Red, TextAnchor.MiddleLeft);
+                text.wordWrap = false;
+                y += packH * u;
             }
 
             text.wordWrap = true;
             foreach (var s in tip.sigils)
             {
                 y += 8 * u;
+                if (s.Key == null)
+                {
+                    // Plain text, such as an item description, over the full width
+                    float textH = WrappedHeight(s.Value, 14, w - inset * 2);
+                    Label(new Rect(x, y, (w - inset * 2) * u, textH * u), s.Value, 14, Red, TextAnchor.UpperLeft);
+                    y += textH * u;
+                    continue;
+                }
                 // Sigil icons are black line art, so each sits on a scrap of card paper
                 var iconRect = new Rect(x, y, icon * u, icon * u);
                 var prev = GUI.color;
@@ -395,7 +421,10 @@ namespace KCMDeckBuilder
         {
             bool over = Hover(r, Key(Kind.Card, c.name, false, r));
             if (over) SetHovered(c, r);
-            if (GUI.Button(r, GUIContent.none, GUIStyle.none)) TryAdd(c);
+            // Right-click takes one copy back out; used here so the button below doesn't add it again
+            var ev = Event.current;
+            if (over && ev.type == EventType.MouseDown && ev.button == 1) { RemoveOne(c); ev.Use(); }
+            else if (GUI.Button(r, GUIContent.none, GUIStyle.none) && ev.button == 0) TryAdd(c);
 
             if (CardFace.Available)
             {
@@ -436,6 +465,15 @@ namespace KCMDeckBuilder
             CommandLineTextDisplayer.PlayCommandLineClickSound();
         }
 
+        private void RemoveOne(CardInfo c)
+        {
+            int i = deck.FindLastIndex(d => d.name == c.name);
+            if (i < 0) return;
+            deck.RemoveAt(i);
+            DeckChanged();
+            CommandLineTextDisplayer.PlayCommandLineClickSound();
+        }
+
         private void DrawDeckPanel(float lw, float rightW, float pad, float y)
         {
             float rx = lw - rightW - pad;
@@ -448,7 +486,7 @@ namespace KCMDeckBuilder
 
             float rowH = 54f;
             var list = R(rx + 8, y + 52, rightW - 16, 0);
-            list.height = deckBox.yMax - list.y - 216 * u;
+            list.height = deckBox.yMax - list.y - 262 * u;
             var content = new Rect(0, 0, list.width - 20 * u, deck.Count * rowH * u);
             clipView = list;
             deckScroll = GUI.BeginScrollView(list, deckScroll, content, false, false);
@@ -471,6 +509,15 @@ namespace KCMDeckBuilder
 
             float bottom = deckBox.yMax / u - 180;
             if (deck.Count > 0) Label(R(rx + 14, bottom - 30, rightW - 28, 26), deckTotals, 15, RedDim, TextAnchor.MiddleLeft);
+            // Items and totem on their own lines, so a long sigil name isn't cut off
+            float ey = bottom - 56;
+            if (totemLine != null)
+            {
+                string line = Measure(totemLine, 14) / u > rightW - 28 ? totemLine.Replace("TOTEM: ", "") : totemLine;
+                Label(R(rx + 14, ey, rightW - 28, 24), line, 14, Red, TextAnchor.MiddleLeft);
+                ey -= 22;
+            }
+            if (itemsLine != null) Label(R(rx + 14, ey, rightW - 28, 24), itemsLine, 14, Red, TextAnchor.MiddleLeft);
             var msgRect = R(rx + 14, bottom, rightW - 28, 30);
             if (Time.unscaledTime < messageUntil) Label(msgRect, message, 14, RedBright, TextAnchor.MiddleLeft);
             else if (deckError != null) Label(msgRect, deckError, 14, RedDim, TextAnchor.MiddleLeft);
@@ -501,7 +548,7 @@ namespace KCMDeckBuilder
         private void StartWithDeck()
         {
             Close(save: false);
-            DeckLogic.StartWithDeck(deck);
+            DeckLogic.StartWithDeck(deck, startItems, TotemValue);
         }
 
         private void DrawSavedDecks(Rect view)
@@ -540,7 +587,17 @@ namespace KCMDeckBuilder
                 Label(new Rect(row.x + 8 * u, row.y, 220 * u, row.height), Upper(d.Key), 16, over ? RedBright : Red, TextAnchor.MiddleLeft);
 
                 if (!savedCardsCache.TryGetValue(d.Value, out var cards))
-                    savedCardsCache[d.Value] = cards = DeckLogic.Resolve(DeckCode.ParseList(d.Value), pool);
+                    savedCardsCache[d.Value] = cards = DeckLogic.Resolve(DeckCode.Parse(d.Value).Cards, pool);
+                if (!savedExtrasCache.TryGetValue(d.Value, out var extras))
+                {
+                    var spec = DeckCode.Parse(d.Value);
+                    var bits = new List<string>();
+                    if (spec.Items.Count > 0) bits.Add(spec.Items.Count == 1 ? "1 ITEM" : spec.Items.Count + " ITEMS");
+                    if (spec.Totem != null) bits.Add("TOTEM: " + (RunStart.ParseTotem(spec.Totem, out var tt, out var ts)
+                        ? RunStart.TribeName(tt) + " + " + DeckLogic.AbilityName(ts.ability) : spec.Totem.Replace(":", " + ")).ToUpperInvariant());
+                    savedExtrasCache[d.Value] = extras = bits.Count > 0 ? string.Join("  ", bits.ToArray()) : null;
+                }
+                if (extras != null) Label(new Rect(row.x + 8 * u, row.yMax - 20 * u, 225 * u, 18 * u), extras, 12, RedDim, TextAnchor.MiddleLeft);
                 float tx = row.x + 236 * u;
                 foreach (var c in cards)
                 {
@@ -586,7 +643,7 @@ namespace KCMDeckBuilder
             string name = deckName.Replace("|", "").Replace("\n", " ").Trim();
             if (name.Length == 0) { Flash("Type a name first."); return; }
             if (deck.Count == 0) { Flash("Deck is empty."); return; }
-            var entry = new KeyValuePair<string, string>(name, DeckCode.JoinList(deck.Select(c => c.name)));
+            var entry = new KeyValuePair<string, string>(name, DeckCode.ToText(CurrentSpec()));
             int idx = savedDecks.FindIndex(d => string.Equals(d.Key, name, StringComparison.OrdinalIgnoreCase));
             if (idx >= 0) savedDecks[idx] = entry; else savedDecks.Add(entry);
             DeckStorage.WriteSavedDecks(savedDecks);
@@ -595,7 +652,8 @@ namespace KCMDeckBuilder
 
         private void LoadSaved(KeyValuePair<string, string> d, List<CardInfo> cards)
         {
-            int missing = LoadCards(cards);
+            var spec = DeckCode.Parse(d.Value);
+            int missing = LoadCards(cards) + SetExtras(spec.Items, spec.Totem);
             deckName = d.Key;
             Flash(missing > 0 ? $"Loaded '{d.Key}' ({missing} locked or missing card(s) skipped)." : $"Loaded '{d.Key}'.");
         }
@@ -603,15 +661,15 @@ namespace KCMDeckBuilder
         private void CopyCode()
         {
             if (deck.Count == 0) { Flash("Deck is empty."); return; }
-            GUIUtility.systemCopyBuffer = DeckCode.Encode(deck.Select(c => c.name));
+            GUIUtility.systemCopyBuffer = DeckCode.Encode(CurrentSpec());
             Flash("Deck code copied to the clipboard.");
         }
 
         private void PasteCode()
         {
-            var names = DeckCode.Decode(GUIUtility.systemCopyBuffer);
-            if (names == null) { Flash("No deck code in the clipboard."); return; }
-            int missing = LoadCards(DeckLogic.Resolve(names, pool));
+            var spec = DeckCode.DecodeSpec(GUIUtility.systemCopyBuffer);
+            if (spec == null) { Flash("No deck code in the clipboard."); return; }
+            int missing = LoadCards(DeckLogic.Resolve(spec.Cards, pool)) + SetExtras(spec.Items, spec.Totem);
             Flash(missing > 0 ? $"Deck loaded ({missing} locked or missing card(s) skipped)." : "Deck loaded from the code.");
         }
 

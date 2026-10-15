@@ -1,3 +1,12 @@
+## 2.2.0
+- ITEMS page: pick the items your run starts with (up to 3, repeats allowed) instead of the usual ones, or let RANDOM pick. The last slot is marked, since the Less Consumables challenge takes it away.
+- TOTEM page: start with a totem of your choice (a tribe's head and a sigil's base), ready from the first battle, or let RANDOM pick. Its pieces also go to your inventory, so the Woodcarver can rebuild it.
+- Card mods: their tribes, totem sigils and items show up on these pages too, and the hover box names the mod they come from.
+- Saved decks and share codes now keep the items and the totem. Older codes and saved decks still load.
+- Right-click a card in the grid to take one copy out of your deck.
+- The filter tabs only show on the card page, and the deck panel's RANDOM only changes the cards.
+- The hover box wraps long mod names, and modded tribes are shown by name on cards and found by the search.
+
 ## 2.1.1
 - Fix: with a custom deck that has no pelts, the Trader no longer appears on the first map node. The game puts it there to sell the extra pelts it gives after early losses; the custom deck doesn't get those pelts, so now the Trader comes only when your own deck has pelts.
 - Fix: giving up a custom deck run no longer counts toward the game's early-loss counter, so it no longer makes the normal starter decks start with fewer pelts (Opossum and Ring Worm instead). Runs with the normal decks work exactly as before.

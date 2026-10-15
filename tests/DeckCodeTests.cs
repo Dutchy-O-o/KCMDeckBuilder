@@ -44,4 +44,39 @@ public class DeckCodeTests
     [Fact]
     public void JoinsLikeTheConfig() =>
         Assert.Equal("Stoat, Wolf", DeckCode.JoinList(new[] { "Stoat", "Wolf" }));
+
+    [Fact]
+    public void ItemsAndTotemRoundTrip()
+    {
+        var spec = new DeckSpec { Cards = { "Stoat", "Wolf" }, Items = { "Pliers", "FishHook" }, Totem = "Bird:Flying" };
+        var back = DeckCode.DecodeSpec(DeckCode.Encode(spec));
+        Assert.Equal(spec.Cards, back.Cards);
+        Assert.Equal(spec.Items, back.Items);
+        Assert.Equal("Bird:Flying", back.Totem);
+    }
+
+    [Fact]
+    public void PlainDeckTextIsUnchanged() =>
+        Assert.Equal("Stoat, Wolf", DeckCode.ToText(new DeckSpec { Cards = { "Stoat", "Wolf" } }));
+
+    [Fact]
+    public void OldSavedDeckHasNoExtras()
+    {
+        var spec = DeckCode.Parse("Stoat, Wolf");
+        Assert.Equal(new[] { "Stoat", "Wolf" }, spec.Cards);
+        Assert.Empty(spec.Items);
+        Assert.Null(spec.Totem);
+    }
+
+    [Fact]
+    public void TotemWithoutItems()
+    {
+        var spec = DeckCode.Parse(DeckCode.ToText(new DeckSpec { Cards = { "Stoat" }, Totem = "Canine:Sharp" }));
+        Assert.Empty(spec.Items);
+        Assert.Equal("Canine:Sharp", spec.Totem);
+    }
+
+    [Fact]
+    public void OldCodesStillDecode() =>
+        Assert.Equal(new[] { "Stoat", "Wolf" }, DeckCode.Decode("KCM:U3RvYXQsV29sZg"));
 }
